@@ -480,6 +480,45 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Validate HEX color code
+function validateHexColor(hex) {
+    if (!hex || hex === '') {
+        return { valid: true, normalized: '#ffffff' }; // Default to white
+    }
+    
+    // Remove # if present
+    let cleanHex = hex.replace(/^#/, '').toUpperCase();
+    
+    // Check if it's a valid 6-character HEX code
+    if (/^[0-9A-F]{6}$/.test(cleanHex)) {
+        return { valid: true, normalized: '#' + cleanHex };
+    }
+    
+    return { valid: false, normalized: null };
+}
+
+// Normalize HEX color (add # if missing, uppercase)
+function normalizeHexColor(hex) {
+    if (!hex || hex === '') {
+        return '#ffffff';
+    }
+    
+    // Remove # if present
+    let cleanHex = hex.replace(/^#/, '').toUpperCase();
+    
+    // If it's 6 characters, add #
+    if (cleanHex.length === 6) {
+        return '#' + cleanHex;
+    }
+    
+    // If it already has # and is 7 characters, return as is
+    if (hex.length === 7 && hex.startsWith('#')) {
+        return hex.toUpperCase();
+    }
+    
+    return '#ffffff'; // Default fallback
+}
+
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', function() {
     // Close button
@@ -500,6 +539,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (createGangBtn) {
         createGangBtn.addEventListener('click', function() {
             openModal('create-gang-modal');
+            
+            // Reset color field to default
+            const colorInput = document.getElementById('gang-color');
+            const colorPreview = document.getElementById('color-preview');
+            const colorPickerPanel = document.getElementById('color-picker-panel');
+            if (colorInput) colorInput.value = '#ffffff';
+            if (colorPreview) colorPreview.style.backgroundColor = '#ffffff';
+            if (colorPickerPanel) colorPickerPanel.classList.add('hidden');
             
             // Load players for dropdown
             fetch(`https://${GetParentResourceName()}/getAllPlayers`, {
@@ -525,6 +572,337 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Custom Color Picker Functionality
+    const colorInput = document.getElementById('gang-color');
+    const colorPreview = document.getElementById('color-preview');
+    const colorPickerPanel = document.getElementById('color-picker-panel');
+    const colorSpectrum = document.getElementById('color-spectrum');
+    const colorHue = document.getElementById('color-hue');
+    const colorCursor = document.getElementById('color-cursor');
+    const hueSlider = document.getElementById('hue-slider');
+    const colorPreviewLarge = document.getElementById('color-preview-large');
+    
+    let currentHue = 0;
+    let currentSaturation = 1;
+    let currentBrightness = 1;
+    let isDraggingSpectrum = false;
+    let isDraggingHue = false;
+    let spectrumUpdateFrame = null;
+    let lastHue = -1; // Track last hue to detect changes
+    
+    // Initialize color picker canvases
+    function initColorPicker() {
+        if (!colorSpectrum || !colorHue) return;
+        
+        const spectrumCtx = colorSpectrum.getContext('2d');
+        const hueCtx = colorHue.getContext('2d');
+        
+        // Draw hue slider
+        const hueGradient = hueCtx.createLinearGradient(0, 0, 0, 200);
+        for (let i = 0; i <= 360; i += 30) {
+            hueGradient.addColorStop(i / 360, `hsl(${i}, 100%, 50%)`);
+        }
+        hueCtx.fillStyle = hueGradient;
+        hueCtx.fillRect(0, 0, 20, 200);
+        
+        // Draw initial spectrum
+        updateColorSpectrum();
+    }
+    
+    // Helper function to convert HSL to RGB
+    function hslToRgb(h, s, l) {
+        h /= 360;
+        let r, g, b;
+        
+        if (s === 0) {
+            r = g = b = l; // achromatic
+        } else {
+            const hue2rgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1/6) return p + (q - p) * 6 * t;
+                if (t < 1/2) return q;
+                if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                return p;
+            };
+            
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+            r = hue2rgb(p, q, h + 1/3);
+            g = hue2rgb(p, q, h);
+            b = hue2rgb(p, q, h - 1/3);
+        }
+        
+        return [
+            Math.round(r * 255),
+            Math.round(g * 255),
+            Math.round(b * 255)
+        ];
+    }
+    
+    // Update color spectrum based on current hue (correctly aligned with HSL)
+    function updateColorSpectrum(force = false) {
+        if (!colorSpectrum) return;
+        
+        // Only update if hue actually changed (avoid unnecessary redraws)
+        if (!force && Math.abs(currentHue - lastHue) < 0.1) {
+            return;
+        }
+        
+        lastHue = currentHue;
+        
+        // Cancel pending update if one exists
+        if (spectrumUpdateFrame) {
+            cancelAnimationFrame(spectrumUpdateFrame);
+            spectrumUpdateFrame = null;
+        }
+        
+        // Use requestAnimationFrame for smooth, throttled updates (60fps max)
+        spectrumUpdateFrame = requestAnimationFrame(() => {
+            const ctx = colorSpectrum.getContext('2d');
+            const width = colorSpectrum.width;
+            const height = colorSpectrum.height;
+            
+            // Use ImageData for accurate color representation
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+            
+            // Draw spectrum with standard layout:
+            // Top left: s=0, l=1 (white) - 0 saturation, 100% lightness
+            // Top right: s=1, l=1 (bright full color) - full saturation, 100% lightness
+            // Bottom right: s=1, l=0 (dark full color) - full saturation, 0% lightness
+            // Bottom left: s=0, l=0 (black) - 0 saturation, 0% lightness
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const s = x / width; // Saturation: 0 (left) to 1 (right)
+                    const l = 1 - (y / height); // Lightness: 1 (top) to 0 (bottom)
+                    
+                    // Convert HSL to RGB
+                    const [r, g, b] = hslToRgb(currentHue, s, l);
+                    
+                    const index = (y * width + x) * 4;
+                    data[index] = r;
+                    data[index + 1] = g;
+                    data[index + 2] = b;
+                    data[index + 3] = 255;
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            
+            // Update cursor position
+            updateCursorPosition();
+            
+            spectrumUpdateFrame = null;
+        });
+    }
+    
+    // Update cursor position on spectrum
+    function updateCursorPosition() {
+        if (!colorCursor) return;
+        
+        const x = currentSaturation * colorSpectrum.width;
+        const y = (1 - currentBrightness) * colorSpectrum.height; // currentBrightness is actually lightness (0-1)
+        colorCursor.style.left = x + 'px';
+        colorCursor.style.top = y + 'px';
+    }
+    
+    // Update hue slider position
+    function updateHueSliderPosition() {
+        if (!hueSlider) return;
+        
+        const y = (currentHue / 360) * colorHue.height;
+        hueSlider.style.top = y + 'px';
+    }
+    
+    // Convert HSL to HEX (using same conversion as spectrum)
+    function hslToHex(h, s, l) {
+        const [r, g, b] = hslToRgb(h, s, l);
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
+    }
+    
+    // Convert HEX to HSL
+    function hexToHsl(hex) {
+        const r = parseInt(hex.slice(1, 3), 16) / 255;
+        const g = parseInt(hex.slice(3, 5), 16) / 255;
+        const b = parseInt(hex.slice(5, 7), 16) / 255;
+        
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        let h, s, l = (max + min) / 2;
+        
+        if (max === min) {
+            h = s = 0;
+        } else {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+                case g: h = ((b - r) / d + 2) / 6; break;
+                case b: h = ((r - g) / d + 4) / 6; break;
+            }
+        }
+        
+        return [h * 360, s, l];
+    }
+    
+    // Update color from current HSL values
+    function updateColorFromHSL() {
+        const hex = hslToHex(currentHue, currentSaturation, currentBrightness);
+        const normalized = hex.toUpperCase();
+        
+        if (colorInput) colorInput.value = normalized;
+        if (colorPreview) colorPreview.style.backgroundColor = normalized;
+        if (colorPreviewLarge) colorPreviewLarge.style.backgroundColor = normalized;
+    }
+    
+    // Update HSL from HEX
+    function updateHSLFromHex(hex) {
+        const validation = validateHexColor(hex);
+        if (!validation.valid) return;
+        
+        const [h, s, l] = hexToHsl(validation.normalized);
+        currentHue = h;
+        currentSaturation = s;
+        currentBrightness = l;
+        
+        updateColorSpectrum();
+        updateHueSliderPosition();
+        updateColorFromHSL();
+    }
+    
+    if (colorPreview && colorPickerPanel) {
+        // Toggle color picker panel
+        colorPreview.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (colorPickerPanel.classList.contains('hidden')) {
+                colorPickerPanel.classList.remove('hidden');
+                initColorPicker();
+                updateHSLFromHex(colorInput ? colorInput.value : '#ffffff');
+            } else {
+                colorPickerPanel.classList.add('hidden');
+            }
+        });
+        
+        // Close color picker when clicking outside
+        document.addEventListener('click', function(e) {
+            if (colorPickerPanel && !colorPickerPanel.contains(e.target) && e.target !== colorPreview) {
+                colorPickerPanel.classList.add('hidden');
+            }
+        });
+    }
+    
+    // Spectrum interaction
+    if (colorSpectrum) {
+        colorSpectrum.addEventListener('mousedown', function(e) {
+            isDraggingSpectrum = true;
+            const rect = colorSpectrum.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            currentSaturation = Math.max(0, Math.min(1, x / colorSpectrum.width));
+            currentBrightness = Math.max(0, Math.min(1, 1 - (y / colorSpectrum.height)));
+            
+            updateCursorPosition();
+            updateColorFromHSL();
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (isDraggingSpectrum && colorSpectrum) {
+                const rect = colorSpectrum.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                currentSaturation = Math.max(0, Math.min(1, x / colorSpectrum.width));
+                currentBrightness = Math.max(0, Math.min(1, 1 - (y / colorSpectrum.height)));
+                
+                updateCursorPosition();
+                updateColorFromHSL();
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            isDraggingSpectrum = false;
+        });
+    }
+    
+    // Hue slider interaction (optimized for immediate feedback)
+    if (colorHue) {
+        colorHue.addEventListener('mousedown', function(e) {
+            isDraggingHue = true;
+            const rect = colorHue.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            
+            currentHue = Math.max(0, Math.min(360, (y / colorHue.height) * 360));
+            
+            updateHueSliderPosition();
+            updateColorFromHSL(); // Update color immediately for responsive feel
+            updateColorSpectrum(); // Update spectrum immediately
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (isDraggingHue && colorHue) {
+                const rect = colorHue.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                
+                currentHue = Math.max(0, Math.min(360, (y / colorHue.height) * 360));
+                
+                updateHueSliderPosition();
+                updateColorFromHSL(); // Update color immediately for responsive feel
+                updateColorSpectrum(); // Update spectrum - requestAnimationFrame will throttle to 60fps
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            isDraggingHue = false;
+            // Final spectrum update to ensure it's accurate
+            updateColorSpectrum(true);
+        });
+    }
+    
+    // Sync text input to color picker
+    if (colorInput && colorPreview) {
+        colorInput.addEventListener('input', function() {
+            let value = this.value;
+            
+            // Limit to 7 characters
+            if (value.length > 7) {
+                value = value.substring(0, 7);
+                this.value = value;
+            }
+            
+            // Auto-add # if 6 characters without #
+            if (value.length === 6 && !value.startsWith('#')) {
+                value = '#' + value;
+                this.value = value;
+            }
+            
+            // Update color picker and preview if valid
+            const validation = validateHexColor(value);
+            if (validation.valid && validation.normalized) {
+                updateHSLFromHex(validation.normalized);
+            }
+        });
+        
+        // Validate on blur
+        colorInput.addEventListener('blur', function() {
+            const validation = validateHexColor(this.value);
+            if (!validation.valid) {
+                showNotification('Invalid HEX color code. Using default white.', 'warning');
+                const defaultColor = '#ffffff';
+                this.value = defaultColor;
+                updateHSLFromHex(defaultColor);
+            } else {
+                const normalized = validation.normalized;
+                this.value = normalized;
+                updateHSLFromHex(normalized);
+            }
+        });
+        
+        // Initial update
+        updateHSLFromHex(colorInput.value || '#ffffff');
+    }
+    
     // Create Gang modal handlers
     const createGangModal = document.getElementById('create-gang-modal');
     const createGangClose = document.getElementById('create-gang-close');
@@ -541,6 +919,8 @@ document.addEventListener('DOMContentLoaded', function() {
         createGangConfirm.addEventListener('click', function() {
             const gangName = document.getElementById('gang-name').value.trim();
             const ownerCitizenid = document.getElementById('gang-owner-id').value;
+            const gangColorInput = document.getElementById('gang-color');
+            let gangColor = gangColorInput ? gangColorInput.value.trim() : '#ffffff';
             
             if (!gangName) {
                 showNotification('Please enter a gang name', 'error');
@@ -552,6 +932,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
+            // Validate and normalize color
+            const colorValidation = validateHexColor(gangColor);
+            if (!colorValidation.valid) {
+                showNotification('Invalid HEX color code. Using default white.', 'warning');
+                gangColor = '#ffffff';
+            } else {
+                gangColor = colorValidation.normalized;
+            }
+            
             // Add loading state
             this.classList.add('loading');
             this.disabled = true;
@@ -561,7 +950,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     gangName: gangName,
-                    ownerCitizenid: ownerCitizenid
+                    ownerCitizenid: ownerCitizenid,
+                    gangColor: gangColor
                 })
             })
             .then(response => response.json())
@@ -571,6 +961,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('gang-name').value = '';
                     document.getElementById('gang-owner-search').value = '';
                     document.getElementById('gang-owner-id').value = '';
+                    const defaultColor = '#ffffff';
+                    if (gangColorInput) gangColorInput.value = defaultColor;
+                    const colorPreview = document.getElementById('color-preview');
+                    const colorPickerPanel = document.getElementById('color-picker-panel');
+                    if (colorPreview) colorPreview.style.backgroundColor = defaultColor;
+                    if (colorPickerPanel) colorPickerPanel.classList.add('hidden');
                     closeModal('create-gang-modal');
                 } else {
                     showNotification(result.message || 'Failed to create gang', 'error');
@@ -686,7 +1082,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // ESC key handler
     document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape' && isMenuOpen) {
-            if (activeDropdowns.length > 0) {
+            const colorPickerPanel = document.getElementById('color-picker-panel');
+            if (colorPickerPanel && !colorPickerPanel.classList.contains('hidden')) {
+                colorPickerPanel.classList.add('hidden');
+            } else if (activeDropdowns.length > 0) {
                 closeAllDropdowns();
             } else if (!document.getElementById('delete-confirm-modal').classList.contains('hidden')) {
                 closeModal('delete-confirm-modal');
