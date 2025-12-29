@@ -92,6 +92,22 @@ RegisterNUICallback('deleteGang', function(data, cb)
     end, gangId)
 end)
 
+RegisterNUICallback('updateGang', function(data, cb)
+    local gangId = data.gangId
+    local gangName = data.gangName
+    local ownerCitizenid = data.ownerCitizenid
+    local gangColor = data.gangColor or '#ffffff'
+    
+    if not gangId or not gangName or not ownerCitizenid then
+        cb({ success = false, message = 'Missing required fields' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:updateGang', function(result)
+        cb(result)
+    end, gangId, gangName, ownerCitizenid, gangColor)
+end)
+
 -- ESC Key Handler
 CreateThread(function()
     while true do

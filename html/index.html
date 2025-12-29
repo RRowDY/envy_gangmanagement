@@ -49,6 +49,20 @@
                             </div>
                         </button>
 
+                        <!-- Edit Gang Button -->
+                        <button class="menu-button" id="edit-gang-btn" data-action="editGang">
+                            <div class="button-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M18.5 2.5C18.8978 2.10218 19.4374 1.87868 20 1.87868C20.5626 1.87868 21.1022 2.10218 21.5 2.5C21.8978 2.89782 22.1213 3.43739 22.1213 4C22.1213 4.56261 21.8978 5.10218 21.5 5.5L12 15L8 16L9 12L18.5 2.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                            <div class="button-content">
+                                <span class="button-title">Edit Gang</span>
+                                <span class="button-description">Modify an existing gang's details</span>
+                            </div>
+                        </button>
+
                         <!-- Delete Gang Button -->
                         <button class="menu-button" id="delete-gang-btn" data-action="deleteGang">
                             <div class="button-icon">
@@ -76,7 +90,29 @@
                             Back
                         </button>
                     </div>
+                    <div class="search-bar-container">
+                        <input type="text" id="delete-gang-search" class="search-input" placeholder="Search gangs by name or leader...">
+                    </div>
                     <div class="gang-cards-grid" id="gang-cards-grid">
+                        <!-- Cards will be dynamically inserted here -->
+                    </div>
+                </div>
+
+                <!-- Gang Cards Container (for Edit Gang) -->
+                <div class="gang-cards-container hidden" id="edit-gang-cards-container">
+                    <div class="cards-header">
+                        <h3>Select a Gang to Edit</h3>
+                        <button class="back-button" id="edit-gang-back-btn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Back
+                        </button>
+                    </div>
+                    <div class="search-bar-container">
+                        <input type="text" id="edit-gang-search" class="search-input" placeholder="Search gangs by name or leader...">
+                    </div>
+                    <div class="gang-cards-grid" id="edit-gang-cards-grid">
                         <!-- Cards will be dynamically inserted here -->
                     </div>
                 </div>
@@ -147,6 +183,58 @@
                         <div class="modal-footer">
                             <button class="modal-button cancel" id="delete-confirm-cancel">Cancel</button>
                             <button class="modal-button danger" id="delete-confirm-delete">Delete</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal for Edit Gang -->
+                <div class="modal hidden" id="edit-gang-modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Edit Gang</h3>
+                            <button class="modal-close" id="edit-gang-close">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <label for="edit-gang-name">Gang Name:</label>
+                            <input type="text" id="edit-gang-name" maxlength="32" placeholder="Enter gang name">
+                            <p class="modal-hint">Maximum 32 characters. Letters, numbers, and spaces only.</p>
+                            
+                            <label for="edit-gang-owner">Select Owner:</label>
+                            <div class="custom-dropdown searchable-dropdown" id="edit-gang-owner-dropdown">
+                                <div class="dropdown-selected" id="edit-gang-owner-selected">
+                                    <input type="text" class="dropdown-search-input" id="edit-gang-owner-search" placeholder="Type to search..." autocomplete="off">
+                                    <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <div class="dropdown-options hidden" id="edit-gang-owner-options"></div>
+                                <input type="hidden" id="edit-gang-owner-id" value="">
+                            </div>
+                            <p class="modal-hint">Search for a player by name or citizen ID</p>
+                            
+                            <label for="edit-gang-color">Gang Color:</label>
+                            <div class="color-picker-wrapper">
+                                <div class="custom-color-picker">
+                                    <div class="color-preview" id="edit-color-preview" style="background-color: #ffffff;"></div>
+                                    <input type="text" id="edit-gang-color" maxlength="7" placeholder="#ffffff" value="#ffffff">
+                                    <div class="color-picker-panel hidden" id="edit-color-picker-panel">
+                                        <div class="color-picker-spectrum">
+                                            <canvas id="edit-color-spectrum" width="200" height="200"></canvas>
+                                            <div class="color-picker-cursor" id="edit-color-cursor"></div>
+                                        </div>
+                                        <div class="color-picker-hue">
+                                            <canvas id="edit-color-hue" width="20" height="200"></canvas>
+                                            <div class="color-picker-hue-slider" id="edit-hue-slider"></div>
+                                        </div>
+                                        <div class="color-picker-preview-large" id="edit-color-preview-large" style="background-color: #ffffff;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="modal-hint">Enter a HEX color code or click the color box to pick a color.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-button cancel" id="edit-gang-cancel">Cancel</button>
+                            <button class="modal-button confirm" id="edit-gang-confirm">Save Changes</button>
                         </div>
                     </div>
                 </div>

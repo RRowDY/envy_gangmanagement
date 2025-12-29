@@ -351,6 +351,7 @@ function closeModal(modalId) {
 function closeAllModals() {
     closeModal('create-gang-modal');
     closeModal('delete-confirm-modal');
+    closeModal('edit-gang-modal');
 }
 
 // Show gang cards view
@@ -369,17 +370,20 @@ function showGangCards() {
 function hideGangCards() {
     const menuButtons = document.getElementById('menu-buttons');
     const cardsContainer = document.getElementById('gang-cards-container');
+    const deleteGangSearch = document.getElementById('delete-gang-search');
     
     if (menuButtons) menuButtons.classList.remove('hidden');
     if (cardsContainer) cardsContainer.classList.add('hidden');
+    if (deleteGangSearch) deleteGangSearch.value = '';
     
     // Reset all cards to front
-    document.querySelectorAll('.gang-card').forEach(card => {
+    document.querySelectorAll('#gang-cards-grid .gang-card').forEach(card => {
         card.classList.remove('flipped');
     });
 }
 
 // Load and render gang cards
+let allDeleteGangs = [];
 function loadGangCards() {
     const cardsGrid = document.getElementById('gang-cards-grid');
     if (!cardsGrid) return;
@@ -393,22 +397,31 @@ function loadGangCards() {
     })
     .then(response => response.json())
     .then(gangs => {
-        cardsGrid.innerHTML = '';
-        
-        if (!gangs || gangs.length === 0) {
-            cardsGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 40px;">No gangs found</div>';
-            return;
-        }
-        
-        gangs.forEach(gang => {
-            const card = createGangCard(gang);
-            cardsGrid.appendChild(card);
-        });
+        allDeleteGangs = gangs || [];
+        renderGangCards(allDeleteGangs);
     })
     .catch(error => {
         console.error('Error loading gangs:', error);
         showNotification('Failed to load gangs', 'error');
         cardsGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #ef4444; padding: 40px;">Error loading gangs</div>';
+    });
+}
+
+// Render delete gang cards with filtering
+function renderGangCards(gangs) {
+    const cardsGrid = document.getElementById('gang-cards-grid');
+    if (!cardsGrid) return;
+    
+    cardsGrid.innerHTML = '';
+    
+    if (!gangs || gangs.length === 0) {
+        cardsGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 40px;">No gangs found</div>';
+        return;
+    }
+    
+    gangs.forEach(gang => {
+        const card = createGangCard(gang);
+        cardsGrid.appendChild(card);
     });
 }
 
@@ -418,10 +431,16 @@ function createGangCard(gang) {
     card.className = 'gang-card';
     card.dataset.gangId = gang.id;
     
+    // Get color with # for display
+    const displayColor = '#' + (gang.color || 'ffffff');
+    
+    // Create gradient background (from normal background to gang color)
+    const gradientStyle = `linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, ${displayColor}40 100%)`;
+    
     card.innerHTML = `
         <div class="gang-card-inner">
-            <div class="gang-card-front">
-                <svg class="gang-card-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <div class="gang-card-front" style="background: ${gradientStyle};">
+                <svg class="gang-card-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88M13 7C13 9.20914 11.2091 11 9 11C6.79086 11 5 9.20914 5 7C5 4.79086 6.79086 3 9 3C11.2091 3 13 4.79086 13 7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
                 <div class="gang-card-name">${escapeHtml(gang.name)}</div>
@@ -478,6 +497,215 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Show edit gang cards view
+function showEditGangCards() {
+    const menuButtons = document.getElementById('menu-buttons');
+    const editCardsContainer = document.getElementById('edit-gang-cards-container');
+    
+    if (menuButtons) menuButtons.classList.add('hidden');
+    if (editCardsContainer) {
+        editCardsContainer.classList.remove('hidden');
+        loadEditGangCards();
+    }
+}
+
+// Hide edit gang cards view
+function hideEditGangCards() {
+    const menuButtons = document.getElementById('menu-buttons');
+    const editCardsContainer = document.getElementById('edit-gang-cards-container');
+    const editGangSearch = document.getElementById('edit-gang-search');
+    
+    if (menuButtons) menuButtons.classList.remove('hidden');
+    if (editCardsContainer) editCardsContainer.classList.add('hidden');
+    if (editGangSearch) editGangSearch.value = '';
+    
+    // Reset all cards to front
+    document.querySelectorAll('#edit-gang-cards-grid .gang-card').forEach(card => {
+        card.classList.remove('flipped');
+    });
+}
+
+// Load and render edit gang cards
+let allEditGangs = [];
+function loadEditGangCards() {
+    const cardsGrid = document.getElementById('edit-gang-cards-grid');
+    if (!cardsGrid) return;
+    
+    cardsGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 40px;">Loading gangs...</div>';
+    
+    fetch(`https://${GetParentResourceName()}/getAllGangs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(gangs => {
+        allEditGangs = gangs || [];
+        renderEditGangCards(allEditGangs);
+    })
+    .catch(error => {
+        console.error('Error loading gangs:', error);
+        showNotification('Failed to load gangs', 'error');
+        cardsGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #ef4444; padding: 40px;">Error loading gangs</div>';
+    });
+}
+
+// Render edit gang cards with filtering
+function renderEditGangCards(gangs) {
+    const cardsGrid = document.getElementById('edit-gang-cards-grid');
+    if (!cardsGrid) return;
+    
+    cardsGrid.innerHTML = '';
+    
+    if (!gangs || gangs.length === 0) {
+        cardsGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 40px;">No gangs found</div>';
+        return;
+    }
+    
+    gangs.forEach(gang => {
+        const card = createEditGangCard(gang);
+        cardsGrid.appendChild(card);
+    });
+}
+
+// Create an edit gang card element
+function createEditGangCard(gang) {
+    const card = document.createElement('div');
+    card.className = 'gang-card';
+    card.dataset.gangId = gang.id;
+    
+    // Get color with # for display
+    const displayColor = '#' + (gang.color || 'ffffff');
+    
+    // Create gradient background (from normal background to gang color)
+    // Using rgba values for the background color to blend properly
+    const gradientStyle = `linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, ${displayColor}40 100%)`;
+    
+    card.innerHTML = `
+        <div class="gang-card-inner">
+            <div class="gang-card-front edit-gang-card" style="background: ${gradientStyle};">
+                <svg class="gang-card-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88M13 7C13 9.20914 11.2091 11 9 11C6.79086 11 5 9.20914 5 7C5 4.79086 6.79086 3 9 3C11.2091 3 13 4.79086 13 7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div class="gang-card-name">${escapeHtml(gang.name)}</div>
+                <div class="gang-card-label">Gang Leader</div>
+                <div class="gang-card-owner">${escapeHtml(gang.ownerName)}</div>
+                <div class="gang-card-label" style="margin-top: 8px;">Color</div>
+                <div class="gang-card-owner" style="font-family: monospace; letter-spacing: 1px;">${displayColor.toUpperCase()}</div>
+            </div>
+            <div class="gang-card-back edit-gang-card-back">
+                <div class="gang-card-back-content">
+                    <svg class="gang-card-back-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M18.5 2.5C18.8978 2.10218 19.4374 1.87868 20 1.87868C20.5626 1.87868 21.1022 2.10218 21.5 2.5C21.8978 2.89782 22.1213 3.43739 22.1213 4C22.1213 4.56261 21.8978 5.10218 21.5 5.5L12 15L8 16L9 12L18.5 2.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <div class="gang-card-back-message">Edit this gang?</div>
+                    <div class="gang-card-back-hint">Click the button below to edit</div>
+                    <button class="gang-card-delete-btn" style="background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%);" data-gang-id="${gang.id}">Edit Gang</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Handle card click to flip
+    card.addEventListener('click', function(e) {
+        // Don't flip if clicking the edit button
+        if (e.target.closest('button')) {
+            return;
+        }
+        this.classList.toggle('flipped');
+    });
+    
+    // Handle edit button click
+    const editBtn = card.querySelector('button');
+    if (editBtn) {
+        editBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const gangId = parseInt(this.dataset.gangId);
+            if (gangId) {
+                openEditGangModal(gangId);
+            }
+        });
+    }
+    
+    return card;
+}
+
+// Open edit gang modal
+let currentEditGangId = null;
+function openEditGangModal(gangId) {
+    const gang = allEditGangs.find(g => g.id === gangId);
+    if (!gang) {
+        showNotification('Gang not found', 'error');
+        return;
+    }
+    
+    currentEditGangId = gangId;
+    
+    // Set form values
+    const nameInput = document.getElementById('edit-gang-name');
+    const colorInput = document.getElementById('edit-gang-color');
+    const colorPreview = document.getElementById('edit-color-preview');
+    
+    if (nameInput) nameInput.value = gang.name;
+    if (colorInput) {
+        const displayColor = '#' + (gang.color || 'ffffff');
+        colorInput.value = displayColor.toUpperCase();
+    }
+    if (colorPreview) {
+        const displayColor = '#' + (gang.color || 'ffffff');
+        colorPreview.style.backgroundColor = displayColor;
+    }
+    
+    // Load players for dropdown and set current owner
+    fetch(`https://${GetParentResourceName()}/getAllPlayers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(players => {
+        if (players && players.length > 0) {
+            const playerOptions = players.map(player => ({
+                value: player.citizenid,
+                text: `${player.name}${player.online ? ' (Online)' : ' (Offline)'}`,
+                searchText: `${player.name} ${player.citizenid}`.toLowerCase()
+            }));
+            
+            // Find current owner in list
+            const currentOwner = playerOptions.find(p => p.value === gang.owner);
+            const defaultValue = currentOwner ? currentOwner.value : '';
+            const defaultText = currentOwner ? currentOwner.text : '';
+            
+            createSearchableDropdown('edit-gang-owner-dropdown', playerOptions, defaultValue, 'Type to search...');
+            if (defaultText) {
+                const searchInput = document.getElementById('edit-gang-owner-search');
+                if (searchInput) searchInput.value = defaultText;
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error loading players:', error);
+        showNotification('Failed to load players', 'error');
+    });
+    
+    openModal('edit-gang-modal');
+    
+    // Initialize color picker after modal is open (functions will be available)
+    setTimeout(() => {
+        const editColorInputEl = document.getElementById('edit-gang-color');
+        if (editColorInputEl && window.updateEditHSLFromHex) {
+            window.updateEditHSLFromHex(editColorInputEl.value || '#ffffff');
+        }
+    }, 100);
+}
+
+// Initialize edit color picker (separate instance from create)
+function initEditColorPicker() {
+    // This will be set up in DOMContentLoaded with separate element IDs
+    // The color picker functionality is already defined, we just need to use different IDs
 }
 
 // Validate HEX color code
@@ -1000,6 +1228,58 @@ document.addEventListener('DOMContentLoaded', function() {
         closeAllDropdowns();
     });
     
+    // Edit Gang button
+    const editGangBtn = document.getElementById('edit-gang-btn');
+    if (editGangBtn) {
+        editGangBtn.addEventListener('click', function() {
+            showEditGangCards();
+        });
+    }
+    
+    // Edit Gang back button
+    const editGangBackBtn = document.getElementById('edit-gang-back-btn');
+    if (editGangBackBtn) {
+        editGangBackBtn.addEventListener('click', function() {
+            hideEditGangCards();
+        });
+    }
+    
+    // Edit Gang search functionality
+    const editGangSearch = document.getElementById('edit-gang-search');
+    if (editGangSearch) {
+        editGangSearch.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+            if (searchTerm === '') {
+                renderEditGangCards(allEditGangs);
+            } else {
+                const filtered = allEditGangs.filter(gang => {
+                    return gang.name.toLowerCase().includes(searchTerm) ||
+                           gang.ownerName.toLowerCase().includes(searchTerm) ||
+                           ('#' + gang.color).toLowerCase().includes(searchTerm);
+                });
+                renderEditGangCards(filtered);
+            }
+        });
+    }
+    
+    // Delete Gang search functionality
+    const deleteGangSearch = document.getElementById('delete-gang-search');
+    if (deleteGangSearch) {
+        deleteGangSearch.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+            if (searchTerm === '') {
+                renderGangCards(allDeleteGangs);
+            } else {
+                const filtered = allDeleteGangs.filter(gang => {
+                    return gang.name.toLowerCase().includes(searchTerm) ||
+                           gang.ownerName.toLowerCase().includes(searchTerm) ||
+                           ('#' + gang.color).toLowerCase().includes(searchTerm);
+                });
+                renderGangCards(filtered);
+            }
+        });
+    }
+    
     // Delete Gang button
     const deleteGangBtn = document.getElementById('delete-gang-btn');
     if (deleteGangBtn) {
@@ -1059,8 +1339,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     closeModal('delete-confirm-modal');
                     pendingDeleteGangId = null;
                     
+                    // Clear search and reload cards
+                    const deleteGangSearch = document.getElementById('delete-gang-search');
+                    if (deleteGangSearch) deleteGangSearch.value = '';
+                    
                     // Reload cards and flip back any flipped cards
-                    document.querySelectorAll('.gang-card').forEach(card => {
+                    document.querySelectorAll('#gang-cards-grid .gang-card').forEach(card => {
                         card.classList.remove('flipped');
                     });
                     loadGangCards();
@@ -1079,19 +1363,353 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Edit Gang modal handlers
+    const editGangModal = document.getElementById('edit-gang-modal');
+    const editGangClose = document.getElementById('edit-gang-close');
+    const editGangCancel = document.getElementById('edit-gang-cancel');
+    const editGangConfirm = document.getElementById('edit-gang-confirm');
+    
+    if (editGangClose) {
+        editGangClose.addEventListener('click', () => {
+            closeModal('edit-gang-modal');
+            currentEditGangId = null;
+        });
+    }
+    if (editGangCancel) {
+        editGangCancel.addEventListener('click', () => {
+            closeModal('edit-gang-modal');
+            currentEditGangId = null;
+        });
+    }
+    if (editGangConfirm) {
+        editGangConfirm.addEventListener('click', function() {
+            if (!currentEditGangId) {
+                showNotification('No gang selected for editing', 'error');
+                return;
+            }
+            
+            const gangName = document.getElementById('edit-gang-name').value.trim();
+            const ownerCitizenid = document.getElementById('edit-gang-owner-id').value;
+            const editGangColorInput = document.getElementById('edit-gang-color');
+            let gangColor = editGangColorInput ? editGangColorInput.value.trim() : '#ffffff';
+            
+            if (!gangName) {
+                showNotification('Please enter a gang name', 'error');
+                return;
+            }
+            
+            if (!ownerCitizenid) {
+                showNotification('Please select a gang owner', 'error');
+                return;
+            }
+            
+            // Validate and normalize color
+            const colorValidation = validateHexColor(gangColor);
+            if (!colorValidation.valid) {
+                showNotification('Invalid HEX color code. Using default white.', 'warning');
+                gangColor = '#ffffff';
+            } else {
+                gangColor = colorValidation.normalized;
+            }
+            
+            // Add loading state
+            this.classList.add('loading');
+            this.disabled = true;
+            
+            fetch(`https://${GetParentResourceName()}/updateGang`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    gangId: currentEditGangId,
+                    gangName: gangName,
+                    ownerCitizenid: ownerCitizenid,
+                    gangColor: gangColor
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showNotification(result.message || 'Gang updated successfully', 'success');
+                    closeModal('edit-gang-modal');
+                    currentEditGangId = null;
+                    
+                    // Reload edit gang cards to show updated data
+                    loadEditGangCards();
+                } else {
+                    showNotification(result.message || 'Failed to update gang', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error updating gang:', error);
+                showNotification('Failed to update gang', 'error');
+            })
+            .finally(() => {
+                this.classList.remove('loading');
+                this.disabled = false;
+            });
+        });
+    }
+    
+    // Edit Gang Color Picker (separate instance)
+    const editColorInput = document.getElementById('edit-gang-color');
+    const editColorPreview = document.getElementById('edit-color-preview');
+    const editColorPickerPanel = document.getElementById('edit-color-picker-panel');
+    const editColorSpectrum = document.getElementById('edit-color-spectrum');
+    const editColorHue = document.getElementById('edit-color-hue');
+    const editColorCursor = document.getElementById('edit-color-cursor');
+    const editHueSlider = document.getElementById('edit-hue-slider');
+    const editColorPreviewLarge = document.getElementById('edit-color-preview-large');
+    
+    // Initialize edit color picker variables (separate from create)
+    let editCurrentHue = 0;
+    let editCurrentSaturation = 1;
+    let editCurrentBrightness = 1;
+    let editIsDraggingSpectrum = false;
+    let editIsDraggingHue = false;
+    let editSpectrumUpdateFrame = null;
+    let editLastHue = -1;
+    
+    // Initialize edit color picker canvases
+    function initEditColorPickerCanvases() {
+        if (!editColorSpectrum || !editColorHue) return;
+        
+        const hueCtx = editColorHue.getContext('2d');
+        const hueGradient = hueCtx.createLinearGradient(0, 0, 0, 200);
+        for (let i = 0; i <= 360; i += 30) {
+            hueGradient.addColorStop(i / 360, `hsl(${i}, 100%, 50%)`);
+        }
+        hueCtx.fillStyle = hueGradient;
+        hueCtx.fillRect(0, 0, 20, 200);
+    }
+    
+    // Update edit color spectrum
+    function updateEditColorSpectrum(force = false) {
+        if (!editColorSpectrum) return;
+        
+        if (!force && Math.abs(editCurrentHue - editLastHue) < 0.1) {
+            return;
+        }
+        
+        editLastHue = editCurrentHue;
+        
+        if (editSpectrumUpdateFrame) {
+            cancelAnimationFrame(editSpectrumUpdateFrame);
+            editSpectrumUpdateFrame = null;
+        }
+        
+        editSpectrumUpdateFrame = requestAnimationFrame(() => {
+            const ctx = editColorSpectrum.getContext('2d');
+            const width = editColorSpectrum.width;
+            const height = editColorSpectrum.height;
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const s = x / width;
+                    const l = 1 - (y / height);
+                    const [r, g, b] = hslToRgb(editCurrentHue, s, l);
+                    
+                    const index = (y * width + x) * 4;
+                    data[index] = r;
+                    data[index + 1] = g;
+                    data[index + 2] = b;
+                    data[index + 3] = 255;
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            
+            const x = editCurrentSaturation * editColorSpectrum.width;
+            const y = (1 - editCurrentBrightness) * editColorSpectrum.height;
+            if (editColorCursor) {
+                editColorCursor.style.left = x + 'px';
+                editColorCursor.style.top = y + 'px';
+            }
+            
+            editSpectrumUpdateFrame = null;
+        });
+    }
+    
+    // Update edit color from HSL
+    function updateEditColorFromHSL() {
+        const hex = hslToHex(editCurrentHue, editCurrentSaturation, editCurrentBrightness);
+        const normalized = hex.toUpperCase();
+        
+        if (editColorInput) editColorInput.value = normalized;
+        if (editColorPreview) editColorPreview.style.backgroundColor = normalized;
+        if (editColorPreviewLarge) editColorPreviewLarge.style.backgroundColor = normalized;
+    }
+    
+    // Update edit HSL from HEX (make it accessible globally)
+    function updateEditHSLFromHex(hex) {
+        const validation = validateHexColor(hex);
+        if (!validation.valid) return;
+        
+        const [h, s, l] = hexToHsl(validation.normalized);
+        editCurrentHue = h;
+        editCurrentSaturation = s;
+        editCurrentBrightness = l;
+        
+        updateEditColorSpectrum();
+        if (editHueSlider) {
+            const y = (editCurrentHue / 360) * editColorHue.height;
+            editHueSlider.style.top = y + 'px';
+        }
+        updateEditColorFromHSL();
+    }
+    
+    // Make it accessible globally for openEditGangModal
+    window.updateEditHSLFromHex = updateEditHSLFromHex;
+    
+    // Setup edit color picker interactions
+    if (editColorPreview && editColorPickerPanel) {
+        editColorPreview.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (editColorPickerPanel.classList.contains('hidden')) {
+                editColorPickerPanel.classList.remove('hidden');
+                initEditColorPickerCanvases();
+                if (editColorInput) {
+                    updateEditHSLFromHex(editColorInput.value || '#ffffff');
+                }
+            } else {
+                editColorPickerPanel.classList.add('hidden');
+            }
+        });
+        
+        document.addEventListener('click', function(e) {
+            if (editColorPickerPanel && !editColorPickerPanel.contains(e.target) && e.target !== editColorPreview) {
+                editColorPickerPanel.classList.add('hidden');
+            }
+        });
+    }
+    
+    // Edit spectrum interaction
+    if (editColorSpectrum) {
+        editColorSpectrum.addEventListener('mousedown', function(e) {
+            editIsDraggingSpectrum = true;
+            const rect = editColorSpectrum.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            editCurrentSaturation = Math.max(0, Math.min(1, x / editColorSpectrum.width));
+            editCurrentBrightness = Math.max(0, Math.min(1, 1 - (y / editColorSpectrum.height)));
+            
+            updateEditColorFromHSL();
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (editIsDraggingSpectrum && editColorSpectrum) {
+                const rect = editColorSpectrum.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                editCurrentSaturation = Math.max(0, Math.min(1, x / editColorSpectrum.width));
+                editCurrentBrightness = Math.max(0, Math.min(1, 1 - (y / editColorSpectrum.height)));
+                
+                updateEditColorFromHSL();
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            editIsDraggingSpectrum = false;
+        });
+    }
+    
+    // Edit hue slider interaction
+    if (editColorHue) {
+        editColorHue.addEventListener('mousedown', function(e) {
+            editIsDraggingHue = true;
+            const rect = editColorHue.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            
+            editCurrentHue = Math.max(0, Math.min(360, (y / editColorHue.height) * 360));
+            
+            if (editHueSlider) {
+                editHueSlider.style.top = (editCurrentHue / 360) * editColorHue.height + 'px';
+            }
+            updateEditColorFromHSL();
+            updateEditColorSpectrum();
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (editIsDraggingHue && editColorHue) {
+                const rect = editColorHue.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                
+                editCurrentHue = Math.max(0, Math.min(360, (y / editColorHue.height) * 360));
+                
+                if (editHueSlider) {
+                    editHueSlider.style.top = (editCurrentHue / 360) * editColorHue.height + 'px';
+                }
+                updateEditColorFromHSL();
+                updateEditColorSpectrum();
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            editIsDraggingHue = false;
+            updateEditColorSpectrum(true);
+        });
+    }
+    
+    // Sync edit text input to color picker
+    if (editColorInput && editColorPreview) {
+        editColorInput.addEventListener('input', function() {
+            let value = this.value;
+            
+            if (value.length > 7) {
+                value = value.substring(0, 7);
+                this.value = value;
+            }
+            
+            if (value.length === 6 && !value.startsWith('#')) {
+                value = '#' + value;
+                this.value = value;
+            }
+            
+            const validation = validateHexColor(value);
+            if (validation.valid && validation.normalized) {
+                updateEditHSLFromHex(validation.normalized);
+            }
+        });
+        
+        editColorInput.addEventListener('blur', function() {
+            const validation = validateHexColor(this.value);
+            if (!validation.valid) {
+                showNotification('Invalid HEX color code. Using default white.', 'warning');
+                const defaultColor = '#ffffff';
+                this.value = defaultColor;
+                updateEditHSLFromHex(defaultColor);
+            } else {
+                const normalized = validation.normalized;
+                this.value = normalized;
+                updateEditHSLFromHex(normalized);
+            }
+        });
+    }
+    
     // ESC key handler
     document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape' && isMenuOpen) {
             const colorPickerPanel = document.getElementById('color-picker-panel');
+            const editColorPickerPanel = document.getElementById('edit-color-picker-panel');
             if (colorPickerPanel && !colorPickerPanel.classList.contains('hidden')) {
                 colorPickerPanel.classList.add('hidden');
+            } else if (editColorPickerPanel && !editColorPickerPanel.classList.contains('hidden')) {
+                editColorPickerPanel.classList.add('hidden');
             } else if (activeDropdowns.length > 0) {
                 closeAllDropdowns();
             } else if (!document.getElementById('delete-confirm-modal').classList.contains('hidden')) {
                 closeModal('delete-confirm-modal');
                 pendingDeleteGangId = null;
+            } else if (!document.getElementById('edit-gang-modal').classList.contains('hidden')) {
+                closeModal('edit-gang-modal');
+                currentEditGangId = null;
             } else if (!document.getElementById('create-gang-modal').classList.contains('hidden')) {
                 closeModal('create-gang-modal');
+            } else if (!document.getElementById('edit-gang-cards-container').classList.contains('hidden')) {
+                hideEditGangCards();
             } else if (!document.getElementById('gang-cards-container').classList.contains('hidden')) {
                 hideGangCards();
             } else {

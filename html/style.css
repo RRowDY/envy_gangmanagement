@@ -1215,6 +1215,33 @@ button, .close-button {
     color: var(--text-primary);
 }
 
+/* Search Bar */
+.search-bar-container {
+    margin-bottom: 20px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.search-input::placeholder {
+    color: var(--text-secondary);
+}
+
 .back-button {
     display: flex;
     align-items: center;
@@ -1265,7 +1292,7 @@ button, .close-button {
     height: 100%;
     transition: transform 0.6s;
     transform-style: preserve-3d;
-    overflow: visible;
+    transform-origin: center center;
 }
 
 .gang-card.flipped .gang-card-inner {
@@ -1275,6 +1302,8 @@ button, .close-button {
 .gang-card-front,
 .gang-card-back {
     position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     backface-visibility: hidden;
@@ -1288,15 +1317,29 @@ button, .close-button {
     justify-content: center;
     align-items: center;
     text-align: center;
-    transition: all 0.3s ease;
+    transition: border-color 0.3s ease, filter 0.3s ease;
     overflow: hidden;
     will-change: transform;
+    transform-origin: center center;
 }
 
-.gang-card-front:hover {
+/* Edit Gang Card with gradient background */
+.gang-card-front.edit-gang-card {
+    position: relative;
+}
+
+.gang-card-front.edit-gang-card > * {
+    position: relative;
+    z-index: 1;
+}
+
+.gang-card:hover .gang-card-front:not(.edit-gang-card) {
     border-color: var(--primary-blue);
     box-shadow: var(--shadow-card), var(--shadow-glow);
     filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.3)) drop-shadow(0 0 20px rgba(37, 99, 235, 0.3));
+}
+
+.gang-card:not(.flipped):hover .gang-card-front:not(.edit-gang-card) {
     transform: translateY(-4px);
 }
 
@@ -1304,6 +1347,12 @@ button, .close-button {
     transform: rotateY(180deg);
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%);
     border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Edit Gang Card Back - Green theme */
+.gang-card-back.edit-gang-card-back {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
+    border-color: rgba(16, 185, 129, 0.3);
 }
 
 .gang-card-icon {
@@ -1362,6 +1411,11 @@ button, .close-button {
     flex-shrink: 0;
 }
 
+/* Edit Gang Card Back Icon - Green */
+.gang-card-back.edit-gang-card-back .gang-card-back-icon {
+    color: #10b981;
+}
+
 .gang-card-back-message {
     font-size: 14px;
     font-weight: 500;
@@ -1379,7 +1433,7 @@ button, .close-button {
 
 .gang-card-delete-btn {
     padding: 10px 16px;
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    /* background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); */
     border: none;
     border-radius: 6px;
     color: white;
@@ -1387,7 +1441,7 @@ button, .close-button {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
     flex-shrink: 0;
     white-space: nowrap;
     margin-top: 2px;
@@ -1395,7 +1449,7 @@ button, .close-button {
 
 .gang-card-delete-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
 }
 
 .gang-card-delete-btn:active {
