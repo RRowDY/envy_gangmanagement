@@ -8,18 +8,21 @@ local isMenuOpen = false
 local function OpenGangMenu()
     if isMenuOpen then return end
     
-    -- Check if player is staff
+    -- Check if player is staff and if player is gang leader
     QBCore.Functions.TriggerCallback('envy_gangscript:isStaff', function(isStaff)
-        isMenuOpen = true
-        SetNuiFocus(true, true)
-        
-        SendNUIMessage({
-            action = 'openMenu',
-            data = {
-                logoImage = Config.LogoImage,
-                isStaff = isStaff
-            }
-        })
+        QBCore.Functions.TriggerCallback('envy_gangscript:isGangLeader', function(isGangLeader)
+            isMenuOpen = true
+            SetNuiFocus(true, true)
+            
+            SendNUIMessage({
+                action = 'openMenu',
+                data = {
+                    logoImage = Config.LogoImage,
+                    isStaff = isStaff,
+                    isGangLeader = isGangLeader
+                }
+            })
+        end)
     end)
 end
 
@@ -106,6 +109,114 @@ RegisterNUICallback('updateGang', function(data, cb)
     QBCore.Functions.TriggerCallback('envy_gangscript:updateGang', function(result)
         cb(result)
     end, gangId, gangName, ownerCitizenid, gangColor)
+end)
+
+RegisterNUICallback('getOnlinePlayersForInvite', function(data, cb)
+    QBCore.Functions.TriggerCallback('envy_gangscript:getOnlinePlayersForInvite', function(players)
+        cb(players)
+    end)
+end)
+
+RegisterNUICallback('invitePlayer', function(data, cb)
+    local targetCitizenid = data.targetCitizenid
+    
+    if not targetCitizenid then
+        cb({ success = false, message = 'Missing target player' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:invitePlayer', function(result)
+        cb(result)
+    end, targetCitizenid)
+end)
+
+RegisterNUICallback('acceptInvite', function(data, cb)
+    local inviteId = data.inviteId
+    
+    if not inviteId then
+        cb({ success = false, message = 'Missing invite ID' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:acceptInvite', function(result)
+        cb(result)
+    end, inviteId)
+end)
+
+RegisterNUICallback('denyInvite', function(data, cb)
+    local inviteId = data.inviteId
+    
+    if not inviteId then
+        cb({ success = false, message = 'Missing invite ID' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:denyInvite', function(result)
+        cb(result)
+    end, inviteId)
+end)
+
+-- Variable to track if invite notification is active
+local inviteNotificationActive = false
+
+-- Register key mappings for invite acceptance/denial
+RegisterKeyMapping('gang_invite_accept', 'Accept Gang Invite', 'keyboard', 'G')
+RegisterKeyMapping('gang_invite_deny', 'Deny Gang Invite', 'keyboard', 'J')
+
+RegisterCommand('gang_invite_accept', function()
+    if inviteNotificationActive then
+        SendNUIMessage({
+            action = 'inviteKeyPress',
+            key = 'accept'
+        })
+        inviteNotificationActive = false
+    end
+end, false)
+
+RegisterCommand('gang_invite_deny', function()
+    if inviteNotificationActive then
+        SendNUIMessage({
+            action = 'inviteKeyPress',
+            key = 'deny'
+        })
+        inviteNotificationActive = false
+    end
+end, false)
+
+-- Show notification event (for inviter notifications)
+RegisterNetEvent('envy_gangscript:showNotification', function(message, type)
+    SendNUIMessage({
+        action = 'showNotification',
+        data = {
+            message = message,
+            type = type or 'info'
+        }
+    })
+end)
+
+-- Receive invite event
+RegisterNetEvent('envy_gangscript:receiveInvite', function(inviteData)
+    SendNUIMessage({
+        action = 'receiveInvite',
+        data = inviteData
+    })
+    
+    -- Enable key handlers for invite notification
+    inviteNotificationActive = true
+    
+    -- Auto-disable after 30 seconds
+    CreateThread(function()
+        Wait(30000)
+        if inviteNotificationActive then
+            inviteNotificationActive = false
+        end
+    end)
+end)
+
+-- NUI Callback to stop listening for keys when notification is closed
+RegisterNUICallback('inviteNotificationClosed', function(data, cb)
+    inviteNotificationActive = false
+    cb('ok')
 end)
 
 -- ESC Key Handler

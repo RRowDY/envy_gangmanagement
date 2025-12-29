@@ -29,6 +29,8 @@ CreateThread(function()
                     `name` varchar(32) NOT NULL,
                     `owner` varchar(50) NOT NULL,
                     `color` varchar(6) NOT NULL DEFAULT 'ffffff',
+                    `gang_ranks` text DEFAULT NULL,
+                    `gang_members` text DEFAULT NULL,
                     `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
                     PRIMARY KEY (`id`),
                     UNIQUE KEY `name` (`name`)
@@ -36,8 +38,7 @@ CreateThread(function()
             ]])
             
             -- Add color column if it doesn't exist (for existing tables)
-            -- Check if column exists, if not, add it
-            local columnExists = MySQL.single.await([[
+            local colorColumnExists = MySQL.single.await([[
                 SELECT COUNT(*) as count 
                 FROM INFORMATION_SCHEMA.COLUMNS 
                 WHERE TABLE_SCHEMA = DATABASE() 
@@ -45,11 +46,45 @@ CreateThread(function()
                 AND COLUMN_NAME = 'color'
             ]], {})
             
-            if not columnExists or columnExists.count == 0 then
+            if not colorColumnExists or colorColumnExists.count == 0 then
                 MySQL.query([[
                     ALTER TABLE `gangs` 
                     ADD COLUMN `color` varchar(6) NOT NULL DEFAULT 'ffffff' 
                     AFTER `owner`;
+                ]])
+            end
+            
+            -- Add gang_ranks column if it doesn't exist
+            local ranksColumnExists = MySQL.single.await([[
+                SELECT COUNT(*) as count 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'gangs' 
+                AND COLUMN_NAME = 'gang_ranks'
+            ]], {})
+            
+            if not ranksColumnExists or ranksColumnExists.count == 0 then
+                MySQL.query([[
+                    ALTER TABLE `gangs` 
+                    ADD COLUMN `gang_ranks` text DEFAULT NULL
+                    AFTER `color`;
+                ]])
+            end
+            
+            -- Add gang_members column if it doesn't exist
+            local membersColumnExists = MySQL.single.await([[
+                SELECT COUNT(*) as count 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'gangs' 
+                AND COLUMN_NAME = 'gang_members'
+            ]], {})
+            
+            if not membersColumnExists or membersColumnExists.count == 0 then
+                MySQL.query([[
+                    ALTER TABLE `gangs` 
+                    ADD COLUMN `gang_members` text DEFAULT NULL
+                    AFTER `gang_ranks`;
                 ]])
             end
         end)
@@ -60,6 +95,137 @@ end)
 local function IsStaff(source)
     return QBCore.Functions.HasPermission(source, 'admin') or QBCore.Functions.HasPermission(source, 'god')
 end
+
+-- Helper function to get character name from citizenid
+local function GetCharacterName(citizenid)
+    -- Try online players first
+    for src, player in pairs(QBCore.Functions.GetQBPlayers()) do
+        if player.PlayerData.citizenid == citizenid then
+            local charinfo = player.PlayerData.charinfo
+            return (charinfo.firstname or '') .. ' ' .. (charinfo.lastname or '')
+        end
+    end
+    
+    -- Try offline players
+    local offlinePlayer = QBCore.Functions.GetOfflinePlayerByCitizenId(citizenid)
+    if offlinePlayer and offlinePlayer.PlayerData and offlinePlayer.PlayerData.charinfo then
+        local charinfo = offlinePlayer.PlayerData.charinfo
+        return (charinfo.firstname or '') .. ' ' .. (charinfo.lastname or '')
+    end
+    
+    return 'Unknown'
+end
+
+-- Helper function to get player's gang info (using gang_members)
+local function GetPlayerGang(source)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return nil end
+    
+    if not MySQL then return nil end
+    
+    local citizenid = Player.PlayerData.citizenid
+    
+    -- Find which gang the player is in
+    local gangs = MySQL.query.await('SELECT id, name, color, gang_members FROM gangs', {})
+    if gangs then
+        for _, gang in ipairs(gangs) do
+            if gang.gang_members then
+                local success, members = pcall(json.decode, gang.gang_members)
+                if success and members and type(members) == 'table' then
+                    if members[citizenid] then
+                        return {
+                            id = gang.id,
+                            name = gang.name,
+                            color = gang.color,
+                            memberData = members[citizenid]
+                        }
+                    end
+                end
+            end
+        end
+    end
+    
+    return nil
+end
+
+-- Helper function to check if player is a gang leader
+local function IsGangLeader(source)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return false end
+    
+    if not MySQL then return false end
+    
+    local citizenid = Player.PlayerData.citizenid
+    
+    -- Check gang_members in gangs table
+    local gangs = MySQL.query.await('SELECT id, name, gang_members FROM gangs', {})
+    if gangs then
+        for _, gang in ipairs(gangs) do
+            if gang.gang_members then
+                local success, members = pcall(json.decode, gang.gang_members)
+                if success and members and type(members) == 'table' then
+                    local memberData = members[citizenid]
+                    if memberData and memberData.rank == 'boss' and memberData.level == 10 then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    
+    return false
+end
+
+-- Helper function to check if player is in a gang (using gang_members)
+local function IsPlayerInGang(citizenid)
+    if not MySQL then return false, nil end
+    
+    local gangs = MySQL.query.await('SELECT id, name, gang_members FROM gangs', {})
+    if gangs then
+        for _, gang in ipairs(gangs) do
+            if gang.gang_members then
+                local success, members = pcall(json.decode, gang.gang_members)
+                if success and members and type(members) == 'table' then
+                    if members[citizenid] then
+                        return true, gang.id
+                    end
+                end
+            end
+        end
+    end
+    
+    return false, nil
+end
+
+-- Active invites table: { inviteId = { gangName, gangId, inviterCitizenid, inviterName, targetCitizenid, timestamp, status } }
+local ActiveInvites = {}
+local InviteIdCounter = 0
+
+-- Clean up expired invites (runs every 30 seconds)
+CreateThread(function()
+    while true do
+        Wait(30000) -- Check every 30 seconds
+        
+        local currentTime = os.time()
+        for inviteId, invite in pairs(ActiveInvites) do
+            -- Timeout after 180 seconds - mark as timeout and start cooldown
+            if invite.status == 'pending' and (currentTime - invite.timestamp) >= 180 then
+                invite.status = 'timeout'
+                invite.timestamp = currentTime -- Reset timestamp for cooldown period
+            end
+            
+            -- Clean up timeout invites after 180 second cooldown
+            if invite.status == 'timeout' and (currentTime - invite.timestamp) >= 180 then
+                ActiveInvites[inviteId] = nil
+            end
+            
+            -- Clean up denied invites after 300 second cooldown
+            if invite.status == 'denied' and (currentTime - invite.timestamp) >= 300 then
+                ActiveInvites[inviteId] = nil
+            end
+        end
+    end
+end)
 
 -- Helper function to validate gang name
 local function ValidateGangName(name)
@@ -218,8 +384,34 @@ QBCore.Functions.CreateCallback('envy_gangscript:createGang', function(source, c
         return
     end
     
+    -- Default gang ranks
+    local defaultRanks = {
+        { name = 'member', level = 0 },
+        { name = 'boss', level = 10 }
+    }
+    local ranksJson = json.encode(defaultRanks)
+    
+    -- Get owner's character name
+    local ownerName = GetCharacterName(ownerCitizenid)
+    
+    -- Initialize gang_members with owner as boss
+    local gangMembers = {
+        [ownerCitizenid] = {
+            charname = ownerName,
+            rank = 'boss',
+            level = 10
+        }
+    }
+    local membersJson = json.encode(gangMembers)
+    
     -- Insert gang into database (color stored without #)
-    local insertId = MySQL.insert.await('INSERT INTO gangs (name, owner, color) VALUES (?, ?, ?)', { gangName, ownerCitizenid, normalizedColor })
+    local insertId = MySQL.insert.await('INSERT INTO gangs (name, owner, color, gang_ranks, gang_members) VALUES (?, ?, ?, ?, ?)', { 
+        gangName, 
+        ownerCitizenid, 
+        normalizedColor,
+        ranksJson,
+        membersJson
+    })
     
     if insertId then
         cb({ success = true, message = 'Gang created successfully' })
@@ -227,26 +419,6 @@ QBCore.Functions.CreateCallback('envy_gangscript:createGang', function(source, c
         cb({ success = false, message = 'Failed to create gang' })
     end
 end)
-
--- Helper function to get character name from citizenid
-local function GetCharacterName(citizenid)
-    -- Try online players first
-    for src, player in pairs(QBCore.Functions.GetQBPlayers()) do
-        if player.PlayerData.citizenid == citizenid then
-            local charinfo = player.PlayerData.charinfo
-            return (charinfo.firstname or '') .. ' ' .. (charinfo.lastname or '')
-        end
-    end
-    
-    -- Try offline players
-    local offlinePlayer = QBCore.Functions.GetOfflinePlayerByCitizenId(citizenid)
-    if offlinePlayer and offlinePlayer.PlayerData and offlinePlayer.PlayerData.charinfo then
-        local charinfo = offlinePlayer.PlayerData.charinfo
-        return (charinfo.firstname or '') .. ' ' .. (charinfo.lastname or '')
-    end
-    
-    return 'Unknown'
-end
 
 -- Callback: Get all gangs
 QBCore.Functions.CreateCallback('envy_gangscript:getAllGangs', function(source, cb)
@@ -335,12 +507,14 @@ QBCore.Functions.CreateCallback('envy_gangscript:updateGang', function(source, c
         return
     end
     
-    -- Check if gang exists
-    local gang = MySQL.single.await('SELECT id, name FROM gangs WHERE id = ?', { gangId })
+    -- Check if gang exists and get current owner
+    local gang = MySQL.single.await('SELECT id, name, owner FROM gangs WHERE id = ?', { gangId })
     if not gang then
         cb({ success = false, message = 'Gang not found' })
         return
     end
+    
+    local oldOwnerCitizenid = gang.owner
     
     -- Validate gang name
     local isValid, errorMsg = ValidateGangName(gangName)
@@ -382,13 +556,395 @@ QBCore.Functions.CreateCallback('envy_gangscript:updateGang', function(source, c
         return
     end
     
+    -- Get current gang_members
+    local gangData = MySQL.single.await('SELECT gang_members FROM gangs WHERE id = ?', { gangId })
+    local members = {}
+    if gangData and gangData.gang_members then
+        local success, decodedMembers = pcall(json.decode, gangData.gang_members)
+        if success and decodedMembers and type(decodedMembers) == 'table' then
+            members = decodedMembers
+        end
+    end
+    
+    -- Handle owner change if owner changed
+    if oldOwnerCitizenid ~= ownerCitizenid then
+        -- Get new owner's character name
+        local newOwnerName = GetCharacterName(ownerCitizenid)
+        
+        -- Update new owner to boss in gang_members
+        if not members[ownerCitizenid] then
+            -- New owner not in gang, add them
+            members[ownerCitizenid] = {
+                charname = newOwnerName,
+                rank = 'boss',
+                level = 10
+            }
+        else
+            -- New owner already in gang, update their rank and name
+            members[ownerCitizenid].charname = newOwnerName
+            members[ownerCitizenid].rank = 'boss'
+            members[ownerCitizenid].level = 10
+        end
+        
+        -- Update old owner to member (if they're still in the gang)
+        if members[oldOwnerCitizenid] then
+            members[oldOwnerCitizenid].rank = 'member'
+            members[oldOwnerCitizenid].level = 0
+        end
+    end
+    
     -- Update gang in database (color stored without #)
-    local result = MySQL.query.await('UPDATE gangs SET name = ?, owner = ?, color = ? WHERE id = ?', { gangName, ownerCitizenid, normalizedColor, gangId })
+    local membersJson = json.encode(members)
+    local result = MySQL.query.await('UPDATE gangs SET name = ?, owner = ?, color = ?, gang_members = ? WHERE id = ?', { 
+        gangName, 
+        ownerCitizenid, 
+        normalizedColor, 
+        membersJson,
+        gangId 
+    })
     
     if result then
         cb({ success = true, message = 'Gang updated successfully' })
     else
         cb({ success = false, message = 'Failed to update gang' })
     end
+end)
+
+-- Callback: Check if player is a gang leader
+QBCore.Functions.CreateCallback('envy_gangscript:isGangLeader', function(source, cb)
+    local isLeader = IsGangLeader(source)
+    cb(isLeader)
+end)
+
+-- Callback: Get player's gang info
+QBCore.Functions.CreateCallback('envy_gangscript:getPlayerGang', function(source, cb)
+    local gangData = GetPlayerGang(source)
+    if not gangData then
+        cb(nil)
+        return
+    end
+    
+    cb({
+        id = gangData.id,
+        name = gangData.name,
+        color = gangData.color,
+        isLeader = gangData.memberData and gangData.memberData.rank == 'boss' and gangData.memberData.level == 10
+    })
+end)
+
+-- Callback: Get online players not in gangs (for inviting)
+QBCore.Functions.CreateCallback('envy_gangscript:getOnlinePlayersForInvite', function(source, cb)
+    if not MySQL then
+        print('[envy_gangscript] getOnlinePlayersForInvite: MySQL not available')
+        cb({})
+        return
+    end
+    
+    -- Check if inviter is a gang leader
+    if not IsGangLeader(source) then
+        print('[envy_gangscript] getOnlinePlayersForInvite: Player is not a gang leader')
+        cb({})
+        return
+    end
+    
+    local players = {}
+    local onlinePlayers = QBCore.Functions.GetQBPlayers()
+    local totalOnline = 0
+    local checkedPlayers = 0
+    
+    -- Get all gang members from all gangs
+    local allGangMembers = {}
+    local gangs = MySQL.query.await('SELECT gang_members FROM gangs', {})
+    if gangs then
+        for _, gang in ipairs(gangs) do
+            if gang.gang_members then
+                local success, members = pcall(json.decode, gang.gang_members)
+                if success and members and type(members) == 'table' then
+                    for citizenid, _ in pairs(members) do
+                        allGangMembers[citizenid] = true
+                    end
+                end
+            end
+        end
+    end
+    
+    for src, player in pairs(onlinePlayers) do
+        totalOnline = totalOnline + 1
+        -- Skip self
+        if src == source then goto continue end
+        
+        checkedPlayers = checkedPlayers + 1
+        
+        -- Check if player is in any gang (using gang_members)
+        local isNotInGang = not allGangMembers[player.PlayerData.citizenid]
+        
+        -- Only include players not in a gang
+        if isNotInGang then
+            local charinfo = player.PlayerData.charinfo
+            local name = (charinfo.firstname or '') .. ' ' .. (charinfo.lastname or '')
+            
+            -- Check if player has a pending invite
+            local hasPendingInvite = false
+            for _, invite in pairs(ActiveInvites) do
+                if invite.targetCitizenid == player.PlayerData.citizenid and invite.status == 'pending' then
+                    hasPendingInvite = true
+                    break
+                end
+            end
+            
+            if not hasPendingInvite then
+                players[#players + 1] = {
+                    citizenid = player.PlayerData.citizenid,
+                    name = name,
+                    serverId = src,
+                    online = true
+                }
+            end
+        end
+        
+        ::continue::
+    end
+    
+    print(string.format('[envy_gangscript] getOnlinePlayersForInvite: Total online: %d, Checked: %d, Available: %d', totalOnline, checkedPlayers, #players))
+    cb(players)
+end)
+
+-- Callback: Invite a player to gang
+QBCore.Functions.CreateCallback('envy_gangscript:invitePlayer', function(source, cb, targetCitizenid)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    -- Check if inviter is a gang leader
+    if not IsGangLeader(source) then
+        cb({ success = false, message = 'You must be a gang leader to invite players' })
+        return
+    end
+    
+    local inviterPlayer = QBCore.Functions.GetPlayer(source)
+    if not inviterPlayer then
+        cb({ success = false, message = 'Player not found' })
+        return
+    end
+    
+    local inviterGang = GetPlayerGang(source)
+    if not inviterGang then
+        cb({ success = false, message = 'You are not in a gang' })
+        return
+    end
+    
+    -- Get gang info from database
+    local gangInfo = MySQL.single.await('SELECT id, name, color FROM gangs WHERE name = ?', { inviterGang.name })
+    if not gangInfo then
+        cb({ success = false, message = 'Gang not found in database' })
+        return
+    end
+    
+    -- Check if target player is online
+    local targetPlayer = nil
+    local onlinePlayers = QBCore.Functions.GetQBPlayers()
+    for src, player in pairs(onlinePlayers) do
+        if player.PlayerData.citizenid == targetCitizenid then
+            targetPlayer = player
+            break
+        end
+    end
+    
+    if not targetPlayer then
+        cb({ success = false, message = 'Target player is not online' })
+        return
+    end
+    
+    -- Check if target player is already in a gang
+    local targetGang = targetPlayer.PlayerData.gang
+    if targetGang and targetGang.name and targetGang.name ~= 'none' then
+        cb({ success = false, message = 'Player is already in a gang' })
+        return
+    end
+    
+    -- Check if target player already has a pending invite
+    for _, invite in pairs(ActiveInvites) do
+        if invite.targetCitizenid == targetCitizenid and invite.status == 'pending' then
+            cb({ success = false, message = 'Player already has a pending invite' })
+            return
+        end
+    end
+    
+    -- Check if target player is on cooldown
+    local currentTime = os.time()
+    for _, invite in pairs(ActiveInvites) do
+        if invite.targetCitizenid == targetCitizenid then
+            -- Check for denied cooldown (300 seconds)
+            if invite.status == 'denied' then
+                local timeSinceDeny = currentTime - invite.timestamp
+                if timeSinceDeny < 300 then
+                    local remainingTime = 300 - timeSinceDeny
+                    cb({ success = false, message = string.format('Player is on cooldown. Try again in %d seconds', remainingTime) })
+                    return
+                end
+            end
+            
+            -- Check for timeout cooldown (180 seconds)
+            if invite.status == 'timeout' then
+                local timeSinceTimeout = currentTime - invite.timestamp
+                if timeSinceTimeout < 180 then
+                    local remainingTime = 180 - timeSinceTimeout
+                    cb({ success = false, message = string.format('Player is on cooldown. Try again in %d seconds', remainingTime) })
+                    return
+                end
+            end
+        end
+    end
+    
+    -- Create invite
+    InviteIdCounter = InviteIdCounter + 1
+    local inviteId = InviteIdCounter
+    
+    local inviterCharinfo = inviterPlayer.PlayerData.charinfo
+    local inviterName = (inviterCharinfo.firstname or '') .. ' ' .. (inviterCharinfo.lastname or '')
+    
+    local targetCharinfo = targetPlayer.PlayerData.charinfo
+    local targetName = (targetCharinfo.firstname or '') .. ' ' .. (targetCharinfo.lastname or '')
+    
+    ActiveInvites[inviteId] = {
+        inviteId = inviteId,
+        gangName = gangInfo.name,
+        gangId = gangInfo.id,
+        gangColor = gangInfo.color,
+        inviterCitizenid = inviterPlayer.PlayerData.citizenid,
+        inviterName = inviterName,
+        targetCitizenid = targetCitizenid,
+        targetName = targetName,
+        timestamp = os.time(),
+        status = 'pending'
+    }
+    
+    -- Send invite to target player
+    TriggerClientEvent('envy_gangscript:receiveInvite', targetPlayer.PlayerData.source, {
+        inviteId = inviteId,
+        gangName = gangInfo.name,
+        gangColor = gangInfo.color,
+        inviterName = inviterName
+    })
+    
+    cb({ success = true, message = string.format('Invite sent to %s', targetName) })
+end)
+
+-- Callback: Accept invite
+QBCore.Functions.CreateCallback('envy_gangscript:acceptInvite', function(source, cb, inviteId)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    local invite = ActiveInvites[inviteId]
+    if not invite then
+        cb({ success = false, message = 'Invite not found or expired' })
+        return
+    end
+    
+    if invite.status ~= 'pending' then
+        cb({ success = false, message = 'Invite is no longer valid' })
+        return
+    end
+    
+    -- Verify this invite is for this player
+    local player = QBCore.Functions.GetPlayer(source)
+    if not player or player.PlayerData.citizenid ~= invite.targetCitizenid then
+        cb({ success = false, message = 'This invite is not for you' })
+        return
+    end
+    
+    -- Check if player is already in a gang (using gang_members)
+    local isInGang, existingGangId = IsPlayerInGang(player.PlayerData.citizenid)
+    if isInGang then
+        cb({ success = false, message = 'You are already in a gang' })
+        ActiveInvites[inviteId] = nil
+        return
+    end
+    
+    -- Get gang data
+    local gang = MySQL.single.await('SELECT id, gang_members FROM gangs WHERE id = ?', { invite.gangId })
+    if not gang then
+        cb({ success = false, message = 'Gang not found' })
+        ActiveInvites[inviteId] = nil
+        return
+    end
+    
+    -- Decode existing members
+    local members = {}
+    if gang.gang_members then
+        local success, decodedMembers = pcall(json.decode, gang.gang_members)
+        if success and decodedMembers and type(decodedMembers) == 'table' then
+            members = decodedMembers
+        end
+    end
+    
+    -- Get player's character name
+    local charinfo = player.PlayerData.charinfo
+    local playerName = (charinfo.firstname or '') .. ' ' .. (charinfo.lastname or '')
+    
+    -- Add new member
+    members[player.PlayerData.citizenid] = {
+        charname = playerName,
+        rank = 'member',
+        level = 0
+    }
+    
+    -- Update gang_members in database
+    local membersJson = json.encode(members)
+    MySQL.query.await('UPDATE gangs SET gang_members = ? WHERE id = ?', { membersJson, invite.gangId })
+    
+    -- Mark invite as accepted
+    ActiveInvites[inviteId].status = 'accepted'
+    
+    -- Notify inviter using UI notification system
+    local inviterPlayer = QBCore.Functions.GetPlayerByCitizenId(invite.inviterCitizenid)
+    if inviterPlayer then
+        TriggerClientEvent('envy_gangscript:showNotification', inviterPlayer.PlayerData.source, string.format('%s accepted your gang invite', invite.targetName), 'success')
+    end
+    
+    cb({ success = true, message = string.format('You joined %s!', invite.gangName) })
+    
+    -- Clean up invite after a short delay
+    SetTimeout(function()
+        ActiveInvites[inviteId] = nil
+    end, 5000)
+end)
+
+-- Callback: Deny invite
+QBCore.Functions.CreateCallback('envy_gangscript:denyInvite', function(source, cb, inviteId)
+    local invite = ActiveInvites[inviteId]
+    if not invite then
+        cb({ success = false, message = 'Invite not found or expired' })
+        return
+    end
+    
+    if invite.status ~= 'pending' then
+        cb({ success = false, message = 'Invite is no longer valid' })
+        return
+    end
+    
+    -- Verify this invite is for this player
+    local player = QBCore.Functions.GetPlayer(source)
+    if not player or player.PlayerData.citizenid ~= invite.targetCitizenid then
+        cb({ success = false, message = 'This invite is not for you' })
+        return
+    end
+    
+    -- Mark invite as denied (will be cleaned up after 300 second cooldown period)
+    ActiveInvites[inviteId].status = 'denied'
+    ActiveInvites[inviteId].timestamp = os.time() -- Update timestamp for cooldown
+    
+    -- Notify inviter using UI notification system
+    local inviterPlayer = QBCore.Functions.GetPlayerByCitizenId(invite.inviterCitizenid)
+    if inviterPlayer then
+        TriggerClientEvent('envy_gangscript:showNotification', inviterPlayer.PlayerData.source, string.format('%s declined your gang invite', invite.targetName), 'error')
+    end
+    
+    cb({ success = true, message = 'Invite declined' })
+    
+    -- Note: Cleanup is handled by the cleanup thread after 300 seconds
 end)
 
