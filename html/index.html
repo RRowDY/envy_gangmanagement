@@ -105,6 +105,26 @@
                                 <input type="hidden" id="gang-owner-id" value="">
                             </div>
                             <p class="modal-hint">Search for a player by name or citizen ID</p>
+                            
+                            <label for="gang-color">Gang Color:</label>
+                            <div class="color-picker-wrapper">
+                                <div class="custom-color-picker">
+                                    <div class="color-preview" id="color-preview" style="background-color: #ffffff;"></div>
+                                    <input type="text" id="gang-color" maxlength="7" placeholder="#ffffff" value="#ffffff">
+                                    <div class="color-picker-panel hidden" id="color-picker-panel">
+                                        <div class="color-picker-spectrum">
+                                            <canvas id="color-spectrum" width="200" height="200"></canvas>
+                                            <div class="color-picker-cursor" id="color-cursor"></div>
+                                        </div>
+                                        <div class="color-picker-hue">
+                                            <canvas id="color-hue" width="20" height="200"></canvas>
+                                            <div class="color-picker-hue-slider" id="hue-slider"></div>
+                                        </div>
+                                        <div class="color-picker-preview-large" id="color-preview-large" style="background-color: #ffffff;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="modal-hint">Enter a HEX color code or click the color box to pick a color. Default: #ffffff</p>
                         </div>
                         <div class="modal-footer">
                             <button class="modal-button cancel" id="create-gang-cancel">Cancel</button>

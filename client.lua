@@ -61,6 +61,7 @@ end)
 RegisterNUICallback('createGang', function(data, cb)
     local gangName = data.gangName
     local ownerCitizenid = data.ownerCitizenid
+    local gangColor = data.gangColor or '#ffffff'
     
     if not gangName or not ownerCitizenid then
         cb({ success = false, message = 'Missing required fields' })
@@ -69,7 +70,7 @@ RegisterNUICallback('createGang', function(data, cb)
     
     QBCore.Functions.TriggerCallback('envy_gangscript:createGang', function(result)
         cb(result)
-    end, gangName, ownerCitizenid)
+    end, gangName, ownerCitizenid, gangColor)
 end)
 
 RegisterNUICallback('getAllGangs', function(data, cb)

@@ -28,11 +28,30 @@ CreateThread(function()
                     `id` int(11) NOT NULL AUTO_INCREMENT,
                     `name` varchar(32) NOT NULL,
                     `owner` varchar(50) NOT NULL,
+                    `color` varchar(6) NOT NULL DEFAULT 'ffffff',
                     `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
                     PRIMARY KEY (`id`),
                     UNIQUE KEY `name` (`name`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ]])
+            
+            -- Add color column if it doesn't exist (for existing tables)
+            -- Check if column exists, if not, add it
+            local columnExists = MySQL.single.await([[
+                SELECT COUNT(*) as count 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'gangs' 
+                AND COLUMN_NAME = 'color'
+            ]], {})
+            
+            if not columnExists or columnExists.count == 0 then
+                MySQL.query([[
+                    ALTER TABLE `gangs` 
+                    ADD COLUMN `color` varchar(6) NOT NULL DEFAULT 'ffffff' 
+                    AFTER `owner`;
+                ]])
+            end
         end)
     end
 end)
@@ -63,6 +82,23 @@ local function ValidateGangName(name)
     end
     
     return true, nil
+end
+
+-- Helper function to validate and normalize HEX color
+local function ValidateAndNormalizeHexColor(hexColor)
+    if not hexColor or hexColor == '' then
+        return true, 'ffffff' -- Default to white
+    end
+    
+    -- Remove # if present
+    hexColor = string.gsub(hexColor, '^#', '')
+    
+    -- Check if it's a valid 6-character HEX code
+    if string.match(hexColor, '^[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]$') then
+        return true, string.upper(hexColor)
+    end
+    
+    return false, 'Invalid HEX color code. Must be 6 hexadecimal characters (e.g., FF0000 or #FF0000)'
 end
 
 -- Callback: Check if player is staff
@@ -130,7 +166,7 @@ QBCore.Functions.CreateCallback('envy_gangscript:getAllPlayers', function(source
 end)
 
 -- Callback: Create gang
-QBCore.Functions.CreateCallback('envy_gangscript:createGang', function(source, cb, gangName, ownerCitizenid)
+QBCore.Functions.CreateCallback('envy_gangscript:createGang', function(source, cb, gangName, ownerCitizenid, gangColor)
     if not IsStaff(source) then
         cb({ success = false, message = 'You do not have permission to create gangs' })
         return
@@ -146,6 +182,13 @@ QBCore.Functions.CreateCallback('envy_gangscript:createGang', function(source, c
     local isValid, errorMsg = ValidateGangName(gangName)
     if not isValid then
         cb({ success = false, message = errorMsg })
+        return
+    end
+    
+    -- Validate and normalize HEX color
+    local isValidColor, normalizedColor = ValidateAndNormalizeHexColor(gangColor)
+    if not isValidColor then
+        cb({ success = false, message = normalizedColor })
         return
     end
     
@@ -175,8 +218,8 @@ QBCore.Functions.CreateCallback('envy_gangscript:createGang', function(source, c
         return
     end
     
-    -- Insert gang into database
-    local insertId = MySQL.insert.await('INSERT INTO gangs (name, owner) VALUES (?, ?)', { gangName, ownerCitizenid })
+    -- Insert gang into database (color stored without #)
+    local insertId = MySQL.insert.await('INSERT INTO gangs (name, owner, color) VALUES (?, ?, ?)', { gangName, ownerCitizenid, normalizedColor })
     
     if insertId then
         cb({ success = true, message = 'Gang created successfully' })
