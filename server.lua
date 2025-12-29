@@ -261,7 +261,7 @@ QBCore.Functions.CreateCallback('envy_gangscript:getAllGangs', function(source, 
         return
     end
     
-    local gangs = MySQL.query.await('SELECT id, name, owner FROM gangs ORDER BY name ASC', {})
+    local gangs = MySQL.query.await('SELECT id, name, owner, color FROM gangs ORDER BY name ASC', {})
     if not gangs then
         cb({})
         return
@@ -274,7 +274,8 @@ QBCore.Functions.CreateCallback('envy_gangscript:getAllGangs', function(source, 
             id = gang.id,
             name = gang.name,
             owner = gang.owner,
-            ownerName = ownerName
+            ownerName = ownerName,
+            color = gang.color or 'ffffff'
         }
     end
     
@@ -313,6 +314,81 @@ QBCore.Functions.CreateCallback('envy_gangscript:deleteGang', function(source, c
         cb({ success = true, message = 'Gang deleted successfully' })
     else
         cb({ success = false, message = 'Failed to delete gang' })
+    end
+end)
+
+-- Callback: Update gang
+QBCore.Functions.CreateCallback('envy_gangscript:updateGang', function(source, cb, gangId, gangName, ownerCitizenid, gangColor)
+    if not IsStaff(source) then
+        cb({ success = false, message = 'You do not have permission to update gangs' })
+        return
+    end
+    
+    -- Check if MySQL is available
+    if not MySQL then
+        cb({ success = false, message = 'Database not ready. Please try again.' })
+        return
+    end
+    
+    if not gangId then
+        cb({ success = false, message = 'Invalid gang ID' })
+        return
+    end
+    
+    -- Check if gang exists
+    local gang = MySQL.single.await('SELECT id, name FROM gangs WHERE id = ?', { gangId })
+    if not gang then
+        cb({ success = false, message = 'Gang not found' })
+        return
+    end
+    
+    -- Validate gang name
+    local isValid, errorMsg = ValidateGangName(gangName)
+    if not isValid then
+        cb({ success = false, message = errorMsg })
+        return
+    end
+    
+    -- Validate and normalize HEX color
+    local isValidColor, normalizedColor = ValidateAndNormalizeHexColor(gangColor)
+    if not isValidColor then
+        cb({ success = false, message = normalizedColor })
+        return
+    end
+    
+    -- Check if owner exists
+    local ownerPlayer = QBCore.Functions.GetOfflinePlayerByCitizenId(ownerCitizenid)
+    if not ownerPlayer then
+        -- Try to get from online players
+        local found = false
+        for src, player in pairs(QBCore.Functions.GetQBPlayers()) do
+            if player.PlayerData.citizenid == ownerCitizenid then
+                ownerPlayer = player
+                found = true
+                break
+            end
+        end
+        
+        if not found then
+            cb({ success = false, message = 'Owner player not found' })
+            return
+        end
+    end
+    
+    -- Check if gang name already exists (case-insensitive, excluding current gang)
+    local existingGang = MySQL.single.await('SELECT id FROM gangs WHERE LOWER(name) = LOWER(?) AND id != ?', { gangName, gangId })
+    if existingGang then
+        cb({ success = false, message = 'A gang with this name already exists' })
+        return
+    end
+    
+    -- Update gang in database (color stored without #)
+    local result = MySQL.query.await('UPDATE gangs SET name = ?, owner = ?, color = ? WHERE id = ?', { gangName, ownerCitizenid, normalizedColor, gangId })
+    
+    if result then
+        cb({ success = true, message = 'Gang updated successfully' })
+    else
+        cb({ success = false, message = 'Failed to update gang' })
     end
 end)
 
