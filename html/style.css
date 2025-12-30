@@ -1701,6 +1701,10 @@ button, .close-button {
     border-bottom: 2px solid var(--border-color);
 }
 
+.roster-table th:last-child {
+    text-align: center;
+}
+
 .roster-table td {
     padding: 16px;
     border-bottom: 1px solid rgba(59, 130, 246, 0.1);
@@ -1790,6 +1794,7 @@ button, .close-button {
     display: flex;
     gap: 8px;
     align-items: center;
+    justify-content: center;
 }
 
 .roster-kick-btn {
