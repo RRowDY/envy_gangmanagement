@@ -96,6 +96,70 @@ local function IsStaff(source)
     return QBCore.Functions.HasPermission(source, 'admin') or QBCore.Functions.HasPermission(source, 'god')
 end
 
+-- Helper function to get player's rank and level
+local function GetPlayerRankInfo(source)
+    local player = QBCore.Functions.GetPlayer(source)
+    if not player then
+        return nil, nil, nil
+    end
+    
+    local citizenid = player.PlayerData.citizenid
+    
+    -- Find the gang the player is in
+    local gangs = MySQL.query.await('SELECT id, gang_members, gang_ranks FROM gangs', {})
+    if not gangs then
+        return nil, nil, nil
+    end
+    
+    for _, gang in ipairs(gangs) do
+        if gang.gang_members then
+            local success, members = pcall(json.decode, gang.gang_members)
+            if success and members and type(members) == 'table' then
+                local memberData = members[citizenid]
+                if memberData then
+                    return memberData.rank, memberData.level, gang
+                end
+            end
+        end
+    end
+    
+    return nil, nil, nil
+end
+
+-- Helper function to check if player has permission
+local function HasPermission(source, permission)
+    local rankName, level, gang = GetPlayerRankInfo(source)
+    if not rankName or not level or not gang then
+        return false
+    end
+    
+    -- Boss (level 10) automatically has all permissions
+    if level == 10 then
+        return true
+    end
+    
+    -- Get rank permissions
+    local ranks = {}
+    if gang.gang_ranks then
+        local success, decodedRanks = pcall(json.decode, gang.gang_ranks)
+        if success and decodedRanks and type(decodedRanks) == 'table' then
+            ranks = decodedRanks
+        end
+    end
+    
+    -- Find the player's rank
+    for _, rank in ipairs(ranks) do
+        if string.lower(rank.name) == string.lower(rankName) then
+            if rank.permissions and rank.permissions[permission] then
+                return true
+            end
+            break
+        end
+    end
+    
+    return false
+end
+
 -- Helper function to get character name from citizenid
 local function GetCharacterName(citizenid)
     -- Try online players first
@@ -716,9 +780,9 @@ QBCore.Functions.CreateCallback('envy_gangscript:invitePlayer', function(source,
         return
     end
     
-    -- Check if inviter is a gang leader
-    if not IsGangLeader(source) then
-        cb({ success = false, message = 'You must be a gang leader to invite players' })
+    -- Check if player has permission to invite
+    if not HasPermission(source, 'invite_player') then
+        cb({ success = false, message = 'You do not have permission to invite players' })
         return
     end
     
@@ -956,45 +1020,14 @@ QBCore.Functions.CreateCallback('envy_gangscript:getGangRoster', function(source
         return
     end
     
-    -- Check if player is a gang leader
-    if not IsGangLeader(source) then
-        cb({ success = false, message = 'You must be a gang leader to view the roster' })
+    -- Check if player is in a gang (all members can view roster)
+    local playerRank, playerLevel, playerGang = GetPlayerRankInfo(source)
+    if not playerRank or not playerLevel or not playerGang then
+        cb({ success = false, message = 'You are not in a gang' })
         return
     end
     
-    local player = QBCore.Functions.GetPlayer(source)
-    if not player then
-        cb({ success = false, message = 'Player not found' })
-        return
-    end
-    
-    local citizenid = player.PlayerData.citizenid
-    
-    -- Find the gang the player is leader of
-    local gangs = MySQL.query.await('SELECT id, gang_members, gang_ranks FROM gangs', {})
-    if not gangs then
-        cb({ success = false, message = 'Failed to retrieve gangs' })
-        return
-    end
-    
-    local playerGang = nil
-    for _, gang in ipairs(gangs) do
-        if gang.gang_members then
-            local success, members = pcall(json.decode, gang.gang_members)
-            if success and members and type(members) == 'table' then
-                local memberData = members[citizenid]
-                if memberData and memberData.rank == 'boss' and memberData.level == 10 then
-                    playerGang = gang
-                    break
-                end
-            end
-        end
-    end
-    
-    if not playerGang then
-        cb({ success = false, message = 'Gang not found' })
-        return
-    end
+    -- playerGang is already retrieved from GetPlayerRankInfo
     
     -- Decode members and ranks
     local members = {}
@@ -1032,6 +1065,22 @@ QBCore.Functions.CreateCallback('envy_gangscript:getGangRoster', function(source
             rankName = string.upper(string.sub(memberData.rank, 1, 1)) .. string.sub(memberData.rank, 2)
         end
         
+        local memberLevel = memberData.level or 0
+        local canKick = false
+        local canEdit = false
+        
+        -- Check if player has kick permission and level allows it
+        if HasPermission(source, 'kick_player') then
+            -- Can kick if target level is lower than player level
+            canKick = playerLevel > memberLevel
+        end
+        
+        -- Check if player has edit permission and level allows it
+        if HasPermission(source, 'edit_player') then
+            -- Can edit if target level is lower than player level
+            canEdit = playerLevel > memberLevel
+        end
+        
         -- Check if player is online
         local isOnline = false
         for src, onlinePlayer in pairs(QBCore.Functions.GetQBPlayers()) do
@@ -1045,9 +1094,12 @@ QBCore.Functions.CreateCallback('envy_gangscript:getGangRoster', function(source
             citizenid = memberCitizenid,
             charname = memberData.charname or 'Unknown',
             rank = rankName,
-            level = memberData.level or 0,
+            rankName = memberData.rank, -- Store the actual rank name for editing
+            level = memberLevel,
             isLeader = memberData.rank == 'boss' and memberData.level == 10,
-            isOnline = isOnline
+            isOnline = isOnline,
+            canKick = canKick,
+            canEdit = canEdit
         }
     end
     
@@ -1200,9 +1252,16 @@ QBCore.Functions.CreateCallback('envy_gangscript:kickPlayer', function(source, c
         return
     end
     
-    -- Check if player is a gang leader
-    if not IsGangLeader(source) then
-        cb({ success = false, message = 'You must be a gang leader to kick players' })
+    -- Check if player has permission to kick
+    if not HasPermission(source, 'kick_player') then
+        cb({ success = false, message = 'You do not have permission to kick players' })
+        return
+    end
+    
+    -- Get player's level for level-based restrictions
+    local playerRank, playerLevel, playerGang = GetPlayerRankInfo(source)
+    if not playerRank or not playerLevel or not playerGang then
+        cb({ success = false, message = 'You are not in a gang' })
         return
     end
     
@@ -1212,38 +1271,14 @@ QBCore.Functions.CreateCallback('envy_gangscript:kickPlayer', function(source, c
         return
     end
     
-    local leaderCitizenid = player.PlayerData.citizenid
+    local playerCitizenid = player.PlayerData.citizenid
     
-    if leaderCitizenid == targetCitizenid then
+    if playerCitizenid == targetCitizenid then
         cb({ success = false, message = 'You cannot kick yourself' })
         return
     end
     
-    -- Find the gang
-    local gangs = MySQL.query.await('SELECT id, name, gang_members FROM gangs', {})
-    if not gangs then
-        cb({ success = false, message = 'Failed to retrieve gangs' })
-        return
-    end
-    
-    local playerGang = nil
-    for _, gang in ipairs(gangs) do
-        if gang.gang_members then
-            local success, members = pcall(json.decode, gang.gang_members)
-            if success and members and type(members) == 'table' then
-                local memberData = members[leaderCitizenid]
-                if memberData and memberData.rank == 'boss' and memberData.level == 10 then
-                    playerGang = gang
-                    break
-                end
-            end
-        end
-    end
-    
-    if not playerGang then
-        cb({ success = false, message = 'Gang not found' })
-        return
-    end
+    -- playerGang is already retrieved from GetPlayerRankInfo
     
     -- Decode members
     local members = {}
@@ -1264,6 +1299,13 @@ QBCore.Functions.CreateCallback('envy_gangscript:kickPlayer', function(source, c
     local targetData = members[targetCitizenid]
     if targetData.rank == 'boss' and targetData.level == 10 then
         cb({ success = false, message = 'You cannot kick the gang leader' })
+        return
+    end
+    
+    -- Level-based restriction: Can't kick same level or higher
+    local targetLevel = targetData.level or 0
+    if playerLevel <= targetLevel then
+        cb({ success = false, message = 'You cannot kick players of the same or higher level' })
         return
     end
     
@@ -1288,6 +1330,733 @@ QBCore.Functions.CreateCallback('envy_gangscript:kickPlayer', function(source, c
         cb({ success = true, message = 'Player has been kicked from the gang' })
     else
         cb({ success = false, message = 'Failed to update gang' })
+    end
+end)
+
+-- Callback: Edit player rank
+QBCore.Functions.CreateCallback('envy_gangscript:editPlayerRank', function(source, cb, targetCitizenid, newRankName)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    -- Check if player has permission to edit players
+    if not HasPermission(source, 'edit_player') then
+        cb({ success = false, message = 'You do not have permission to edit players' })
+        return
+    end
+    
+    -- Get player's level for level-based restrictions
+    local playerRank, playerLevel, playerGang = GetPlayerRankInfo(source)
+    if not playerRank or not playerLevel or not playerGang then
+        cb({ success = false, message = 'Could not determine your rank' })
+        return
+    end
+    
+    local player = QBCore.Functions.GetPlayer(source)
+    if not player then
+        cb({ success = false, message = 'Player not found' })
+        return
+    end
+    
+    -- Decode members
+    local members = {}
+    if playerGang.gang_members then
+        local success, decodedMembers = pcall(json.decode, playerGang.gang_members)
+        if success and decodedMembers and type(decodedMembers) == 'table' then
+            members = decodedMembers
+        end
+    end
+    
+    local targetMember = members[targetCitizenid]
+    if not targetMember then
+        cb({ success = false, message = 'Player is not in your gang' })
+        return
+    end
+    
+    -- Level-based restriction: Can't edit same level or higher
+    local targetLevel = targetMember.level or 0
+    if playerLevel <= targetLevel then
+        cb({ success = false, message = 'You cannot edit players of the same or higher level' })
+        return
+    end
+    
+    -- Can't edit the boss
+    if targetMember.rank == 'boss' and targetLevel == 10 then
+        cb({ success = false, message = 'You cannot edit the gang leader' })
+        return
+    end
+    
+    -- Get ranks to validate the new rank
+    local ranks = {}
+    if playerGang.gang_ranks then
+        local success, decodedRanks = pcall(json.decode, playerGang.gang_ranks)
+        if success and decodedRanks and type(decodedRanks) == 'table' then
+            ranks = decodedRanks
+        end
+    end
+    
+    -- Find the new rank to get its level
+    local newRankData = nil
+    for _, rank in ipairs(ranks) do
+        if string.lower(rank.name) == string.lower(newRankName) then
+            newRankData = rank
+            break
+        end
+    end
+    
+    if not newRankData then
+        cb({ success = false, message = 'Rank not found' })
+        return
+    end
+    
+    -- Level-based restriction: Can't set a rank at the same level or higher than player's level
+    local newRankLevel = newRankData.level or 0
+    if playerLevel <= newRankLevel then
+        cb({ success = false, message = 'You cannot set a player to a rank at the same level or higher than yours' })
+        return
+    end
+    
+    -- Update member's rank
+    targetMember.rank = newRankData.name
+    targetMember.level = newRankData.level or 0
+    
+    -- Update gang_members in database
+    local membersJson = json.encode(members)
+    local updateResult = MySQL.query.await('UPDATE gangs SET gang_members = ? WHERE id = ?', { membersJson, playerGang.id })
+    
+    if updateResult then
+        -- Notify the edited player if they're online
+        local targetPlayer = QBCore.Functions.GetPlayerByCitizenId(targetCitizenid)
+        if targetPlayer then
+            TriggerClientEvent('envy_gangscript:showNotification', targetPlayer.PlayerData.source, 
+                string.format('Your rank in %s has been changed to %s', playerGang.name, newRankData.name), 'info', 'Rank Changed')
+        end
+        
+        cb({ success = true, message = 'Player rank updated successfully' })
+    else
+        cb({ success = false, message = 'Failed to update player rank' })
+    end
+end)
+
+-- Callback: Get gang ranks
+QBCore.Functions.CreateCallback('envy_gangscript:getGangRanks', function(source, cb)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    -- Check if player is in a gang (needed for editing player ranks)
+    local playerRank, playerLevel, playerGang = GetPlayerRankInfo(source)
+    if not playerRank or not playerLevel or not playerGang then
+        cb({ success = false, message = 'You are not in a gang' })
+        return
+    end
+    
+    -- playerGang is already retrieved from GetPlayerRankInfo
+    -- Allow all gang members to view ranks (needed for edit player modal)
+    
+    -- Decode ranks
+    local ranks = {}
+    if playerGang.gang_ranks then
+        local success, decodedRanks = pcall(json.decode, playerGang.gang_ranks)
+        if success and decodedRanks and type(decodedRanks) == 'table' then
+            ranks = decodedRanks
+        end
+    end
+    
+    -- Sort ranks by level (descending)
+    table.sort(ranks, function(a, b)
+        return a.level > b.level
+    end)
+    
+    cb({ success = true, ranks = ranks })
+end)
+
+-- Callback: Add rank
+QBCore.Functions.CreateCallback('envy_gangscript:addRank', function(source, cb, rankName)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    -- Check if player has permission to edit ranks
+    if not HasPermission(source, 'edit_ranks') then
+        cb({ success = false, message = 'You do not have permission to edit ranks' })
+        return
+    end
+    
+    -- Get player's gang
+    local playerRank, playerLevel, playerGang = GetPlayerRankInfo(source)
+    if not playerRank or not playerLevel or not playerGang then
+        cb({ success = false, message = 'You are not in a gang' })
+        return
+    end
+    
+    if not rankName or rankName == '' then
+        cb({ success = false, message = 'Rank name cannot be empty' })
+        return
+    end
+    
+    -- Normalize rank name to lowercase
+    rankName = string.lower(string.gsub(rankName, '^%s*(.-)%s*$', '%1'))
+    
+    -- Validate rank name
+    if string.match(rankName, '[^%w%s]') then
+        cb({ success = false, message = 'Rank name can only contain letters, numbers, and spaces' })
+        return
+    end
+    
+    -- playerGang is already retrieved from GetPlayerRankInfo
+    
+    -- Decode ranks
+    local ranks = {}
+    if playerGang.gang_ranks then
+        local success, decodedRanks = pcall(json.decode, playerGang.gang_ranks)
+        if success and decodedRanks and type(decodedRanks) == 'table' then
+            ranks = decodedRanks
+        end
+    end
+    
+    -- Check if rank name already exists
+    for _, rank in ipairs(ranks) do
+        if string.lower(rank.name) == rankName then
+            cb({ success = false, message = 'A rank with this name already exists' })
+            return
+        end
+    end
+    
+    -- Count custom ranks (excluding boss and member)
+    local customRankCount = 0
+    for _, rank in ipairs(ranks) do
+        if rank.name ~= 'boss' and rank.name ~= 'member' then
+            customRankCount = customRankCount + 1
+        end
+    end
+    
+    -- Check if we can add more ranks (max 9 custom ranks, levels 1-9)
+    if customRankCount >= 9 then
+        cb({ success = false, message = 'Maximum number of custom ranks reached (9)' })
+        return
+    end
+    
+    -- Separate existing custom ranks from boss and member
+    local existingCustomRanks = {}
+    local bossRank = nil
+    local memberRank = nil
+    
+    for _, rank in ipairs(ranks) do
+        if rank.name == 'boss' then
+            bossRank = rank
+        elseif rank.name == 'member' then
+            memberRank = rank
+        else
+            existingCustomRanks[#existingCustomRanks + 1] = rank
+        end
+    end
+    
+    -- Create new rank - assign the next available level starting from 1
+    -- Levels are assigned sequentially: 1, 2, 3, ... up to 9
+    local nextLevel = customRankCount + 1
+    
+    local newRank = {
+        name = rankName,
+        level = nextLevel, -- Next available level (1, 2, 3, ... up to 9)
+        permissions = {}
+    }
+    
+    -- Add new rank to the end of custom ranks array
+    existingCustomRanks[#existingCustomRanks + 1] = newRank
+    
+    -- Sort custom ranks by level (descending) for final array (highest level first)
+    table.sort(existingCustomRanks, function(a, b)
+        return a.level > b.level
+    end)
+    
+    -- Update ranks array
+    local updatedRanks = {}
+    -- Add boss (level 10)
+    if bossRank then
+        updatedRanks[#updatedRanks + 1] = bossRank
+    end
+    -- Add custom ranks (levels 9-1, highest first)
+    for _, rank in ipairs(existingCustomRanks) do
+        updatedRanks[#updatedRanks + 1] = rank
+    end
+    -- Add member (level 0)
+    if memberRank then
+        updatedRanks[#updatedRanks + 1] = memberRank
+    end
+    
+    -- Update database
+    local ranksJson = json.encode(updatedRanks)
+    local updateResult = MySQL.query.await('UPDATE gangs SET gang_ranks = ? WHERE id = ?', { ranksJson, playerGang.id })
+    
+    if updateResult then
+        cb({ success = true, message = 'Rank added successfully', ranks = updatedRanks })
+    else
+        cb({ success = false, message = 'Failed to update ranks' })
+    end
+end)
+
+-- Callback: Delete rank
+QBCore.Functions.CreateCallback('envy_gangscript:deleteRank', function(source, cb, rankName)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    -- Check if player has permission to edit ranks
+    if not HasPermission(source, 'edit_ranks') then
+        cb({ success = false, message = 'You do not have permission to edit ranks' })
+        return
+    end
+    
+    -- Get player's level for level-based restrictions
+    local playerRank, playerLevel, playerGang = GetPlayerRankInfo(source)
+    if not playerRank or not playerLevel or not playerGang then
+        cb({ success = false, message = 'You are not in a gang' })
+        return
+    end
+    
+    if not rankName or rankName == '' then
+        cb({ success = false, message = 'Rank name cannot be empty' })
+        return
+    end
+    
+    rankName = string.lower(rankName)
+    
+    -- Cannot delete default ranks
+    if rankName == 'boss' or rankName == 'member' then
+        cb({ success = false, message = 'Cannot delete default ranks' })
+        return
+    end
+    
+    -- playerGang is already retrieved from GetPlayerRankInfo
+    
+    -- Decode ranks
+    local ranks = {}
+    if playerGang.gang_ranks then
+        local success, decodedRanks = pcall(json.decode, playerGang.gang_ranks)
+        if success and decodedRanks and type(decodedRanks) == 'table' then
+            ranks = decodedRanks
+        end
+    end
+    
+    -- Check if rank exists
+    local rankExists = false
+    for _, rank in ipairs(ranks) do
+        if string.lower(rank.name) == rankName then
+            rankExists = true
+            break
+        end
+    end
+    
+    if not rankExists then
+        cb({ success = false, message = 'Rank not found' })
+        return
+    end
+    
+    -- Remove rank
+    local updatedRanks = {}
+    for _, rank in ipairs(ranks) do
+        if string.lower(rank.name) ~= rankName then
+            updatedRanks[#updatedRanks + 1] = rank
+        end
+    end
+    
+    -- Recalculate levels for custom ranks
+    local customRanks = {}
+    for _, rank in ipairs(updatedRanks) do
+        if rank.name ~= 'boss' and rank.name ~= 'member' then
+            customRanks[#customRanks + 1] = rank
+        end
+    end
+    
+    -- Reassign levels to custom ranks (9 down to 1, top to bottom)
+    for i, rank in ipairs(customRanks) do
+        rank.level = #customRanks - i + 1
+    end
+    
+    -- Sort custom ranks by level (descending) for final array
+    table.sort(customRanks, function(a, b)
+        return a.level > b.level
+    end)
+    
+    -- Rebuild ranks array
+    local finalRanks = {}
+    -- Add boss (level 10)
+    for _, rank in ipairs(updatedRanks) do
+        if rank.name == 'boss' then
+            finalRanks[#finalRanks + 1] = rank
+            break
+        end
+    end
+    -- Add custom ranks (levels 9-1, highest first)
+    for _, rank in ipairs(customRanks) do
+        finalRanks[#finalRanks + 1] = rank
+    end
+    -- Add member (level 0)
+    for _, rank in ipairs(updatedRanks) do
+        if rank.name == 'member' then
+            finalRanks[#finalRanks + 1] = rank
+            break
+        end
+    end
+    
+    -- Update members with deleted rank to member (level 0)
+    local members = {}
+    if playerGang.gang_members then
+        local success, decodedMembers = pcall(json.decode, playerGang.gang_members)
+        if success and decodedMembers and type(decodedMembers) == 'table' then
+            members = decodedMembers
+        end
+    end
+    
+    for memberCitizenid, memberData in pairs(members) do
+        if string.lower(memberData.rank) == rankName then
+            members[memberCitizenid].rank = 'member'
+            members[memberCitizenid].level = 0
+        end
+    end
+    
+    -- Update database
+    local ranksJson = json.encode(finalRanks)
+    local membersJson = json.encode(members)
+    local updateResult = MySQL.query.await('UPDATE gangs SET gang_ranks = ?, gang_members = ? WHERE id = ?', { ranksJson, membersJson, playerGang.id })
+    
+    if updateResult then
+        cb({ success = true, message = 'Rank deleted successfully', ranks = finalRanks })
+    else
+        cb({ success = false, message = 'Failed to update ranks' })
+    end
+end)
+
+-- Callback: Reorder ranks
+QBCore.Functions.CreateCallback('envy_gangscript:reorderRanks', function(source, cb, orderedRankNames)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    -- Check if player has permission to edit ranks
+    if not HasPermission(source, 'edit_ranks') then
+        cb({ success = false, message = 'You do not have permission to edit ranks' })
+        return
+    end
+    
+    if not orderedRankNames or type(orderedRankNames) ~= 'table' then
+        cb({ success = false, message = 'Invalid rank order' })
+        return
+    end
+    
+    -- Get player's gang
+    local playerRank, playerLevel, playerGang = GetPlayerRankInfo(source)
+    if not playerRank or not playerLevel or not playerGang then
+        cb({ success = false, message = 'You are not in a gang' })
+        return
+    end
+    
+    -- playerGang is already retrieved from GetPlayerRankInfo
+    
+    -- Decode ranks
+    local ranks = {}
+    if playerGang.gang_ranks then
+        local success, decodedRanks = pcall(json.decode, playerGang.gang_ranks)
+        if success and decodedRanks and type(decodedRanks) == 'table' then
+            ranks = decodedRanks
+        end
+    end
+    
+    -- Create rank lookup
+    local rankLookup = {}
+    for _, rank in ipairs(ranks) do
+        rankLookup[string.lower(rank.name)] = rank
+    end
+    
+    -- Build new ranks array from ordered names
+    -- The order should be: Boss (10), Custom ranks (9-1), Member (0)
+    local newRanks = {}
+    local customRanks = {}
+    local bossRank = nil
+    local memberRank = nil
+    
+    -- Extract boss and member, collect custom ranks in order
+    for _, rankName in ipairs(orderedRankNames) do
+        local lowerName = string.lower(rankName)
+        if rankLookup[lowerName] then
+            local rank = rankLookup[lowerName]
+            if rank.name == 'boss' then
+                bossRank = rank
+                bossRank.level = 10
+            elseif rank.name == 'member' then
+                memberRank = rank
+                memberRank.level = 0
+            else
+                -- Custom rank - preserve order
+                customRanks[#customRanks + 1] = rank
+            end
+        end
+    end
+    
+    -- Assign levels to custom ranks based on their position (9 down to 1, top to bottom)
+    -- First custom rank gets level 9, second gets 8, etc.
+    for i, rank in ipairs(customRanks) do
+        rank.level = #customRanks - i + 1
+    end
+    
+    -- Build final array: Boss first, then custom ranks (highest level first), then Member
+    if bossRank then
+        newRanks[#newRanks + 1] = bossRank
+    end
+    
+    -- Add custom ranks in descending level order (9 to 1)
+    table.sort(customRanks, function(a, b)
+        return a.level > b.level
+    end)
+    for _, rank in ipairs(customRanks) do
+        newRanks[#newRanks + 1] = rank
+    end
+    
+    if memberRank then
+        newRanks[#newRanks + 1] = memberRank
+    end
+    
+    -- Update database
+    local ranksJson = json.encode(newRanks)
+    local updateResult = MySQL.query.await('UPDATE gangs SET gang_ranks = ? WHERE id = ?', { ranksJson, playerGang.id })
+    
+    if updateResult then
+        cb({ success = true, message = 'Ranks reordered successfully', ranks = newRanks })
+    else
+        cb({ success = false, message = 'Failed to update ranks' })
+    end
+end)
+
+-- Callback: Get player permissions
+QBCore.Functions.CreateCallback('envy_gangscript:getPlayerPermissions', function(source, cb)
+    local permissions = {
+        invite_player = HasPermission(source, 'invite_player'),
+        kick_player = HasPermission(source, 'kick_player'),
+        edit_ranks = HasPermission(source, 'edit_ranks'),
+        edit_player = HasPermission(source, 'edit_player'),
+        edit_rank_permissions = HasPermission(source, 'edit_rank_permissions')
+    }
+    
+    -- Get player's level for UI restrictions
+    local rankName, level, gang = GetPlayerRankInfo(source)
+    
+    -- Boss (level 10) automatically has all permissions
+    if level == 10 then
+        permissions.edit_rank_permissions = true
+    end
+    
+    cb({
+        permissions = permissions,
+        playerLevel = level or 0
+    })
+end)
+
+-- Callback: Update rank permission
+QBCore.Functions.CreateCallback('envy_gangscript:updateRankPermission', function(source, cb, rankName, permission, enabled)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    -- Get player's gang info
+    local playerRank, playerLevel, playerGang = GetPlayerRankInfo(source)
+    if not playerRank or not playerLevel or not playerGang then
+        cb({ success = false, message = 'You are not in a gang' })
+        return
+    end
+    
+    -- Check if player has permission to edit rank permissions
+    -- Boss (level 10) automatically has all permissions, or they need edit_rank_permissions
+    local canEditPermissions = false
+    if playerLevel == 10 then
+        -- Boss can always edit permissions
+        canEditPermissions = true
+    else
+        -- For non-boss, they need edit_rank_permissions permission
+        canEditPermissions = HasPermission(source, 'edit_rank_permissions')
+    end
+    
+    if not canEditPermissions then
+        cb({ success = false, message = 'You do not have permission to edit rank permissions' })
+        return
+    end
+    
+    -- Validate permission name
+    local validPermissions = {
+        ['invite_player'] = true,
+        ['kick_player'] = true,
+        ['edit_ranks'] = true,
+        ['edit_rank_permissions'] = true,
+        ['edit_player'] = true
+    }
+    
+    if not validPermissions[permission] then
+        cb({ success = false, message = 'Invalid permission' })
+        return
+    end
+    
+    -- playerGang is already retrieved from GetPlayerRankInfo above
+    
+    -- Decode ranks
+    local ranks = {}
+    if playerGang.gang_ranks then
+        local success, decodedRanks = pcall(json.decode, playerGang.gang_ranks)
+        if success and decodedRanks and type(decodedRanks) == 'table' then
+            ranks = decodedRanks
+        end
+    end
+    
+    -- Find and update the rank
+    local rankFound = false
+    for _, rank in ipairs(ranks) do
+        if string.lower(rank.name) == string.lower(rankName) then
+            -- Don't allow editing boss or member permissions
+            if rank.name == 'boss' or rank.name == 'member' then
+                cb({ success = false, message = 'Cannot modify permissions for default ranks' })
+                return
+            end
+            
+            -- Initialize permissions if not exists
+            if not rank.permissions then
+                rank.permissions = {}
+            end
+            
+            -- Update permission
+            rank.permissions[permission] = enabled
+            rankFound = true
+            break
+        end
+    end
+    
+    if not rankFound then
+        cb({ success = false, message = 'Rank not found' })
+        return
+    end
+    
+    -- Update database
+    local success, ranksJson = pcall(json.encode, ranks)
+    if not success then
+        cb({ success = false, message = 'Failed to encode ranks data' })
+        return
+    end
+    
+    local updateResult = MySQL.query.await('UPDATE gangs SET gang_ranks = ? WHERE id = ?', { ranksJson, playerGang.id })
+    
+    if updateResult then
+        cb({ success = true, message = 'Permission updated successfully', ranks = ranks })
+    else
+        cb({ success = false, message = 'Failed to update permission' })
+    end
+end)
+
+-- Callback: Update multiple rank permissions at once
+QBCore.Functions.CreateCallback('envy_gangscript:updateRankPermissions', function(source, cb, rankName, permissions)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    -- Get player's gang info
+    local playerRank, playerLevel, playerGang = GetPlayerRankInfo(source)
+    if not playerRank or not playerLevel or not playerGang then
+        cb({ success = false, message = 'You are not in a gang' })
+        return
+    end
+    
+    -- Check if player has permission to edit rank permissions
+    local canEditPermissions = false
+    if playerLevel == 10 then
+        -- Boss can always edit permissions
+        canEditPermissions = true
+    else
+        -- For non-boss, they need edit_rank_permissions permission
+        canEditPermissions = HasPermission(source, 'edit_rank_permissions')
+    end
+    
+    if not canEditPermissions then
+        cb({ success = false, message = 'You do not have permission to edit rank permissions' })
+        return
+    end
+    
+    if not rankName or not permissions or type(permissions) ~= 'table' then
+        cb({ success = false, message = 'Invalid data provided' })
+        return
+    end
+    
+    -- Validate permission names
+    local validPermissions = {
+        ['invite_player'] = true,
+        ['kick_player'] = true,
+        ['edit_ranks'] = true,
+        ['edit_rank_permissions'] = true,
+        ['edit_player'] = true
+    }
+    
+    for permName, _ in pairs(permissions) do
+        if not validPermissions[permName] then
+            cb({ success = false, message = 'Invalid permission: ' .. permName })
+            return
+        end
+    end
+    
+    -- Decode ranks
+    local ranks = {}
+    if playerGang.gang_ranks then
+        local success, decodedRanks = pcall(json.decode, playerGang.gang_ranks)
+        if success and decodedRanks and type(decodedRanks) == 'table' then
+            ranks = decodedRanks
+        end
+    end
+    
+    -- Find and update the rank
+    local rankFound = false
+    for _, rank in ipairs(ranks) do
+        if string.lower(rank.name) == string.lower(rankName) then
+            -- Don't allow editing boss or member permissions
+            if rank.name == 'boss' or rank.name == 'member' then
+                cb({ success = false, message = 'Cannot modify permissions for default ranks' })
+                return
+            end
+            
+            -- Initialize permissions if not exists
+            if not rank.permissions then
+                rank.permissions = {}
+            end
+            
+            -- Update all permissions
+            for permName, permValue in pairs(permissions) do
+                rank.permissions[permName] = permValue
+            end
+            
+            rankFound = true
+            break
+        end
+    end
+    
+    if not rankFound then
+        cb({ success = false, message = 'Rank not found' })
+        return
+    end
+    
+    -- Update database
+    local success, ranksJson = pcall(json.encode, ranks)
+    if not success then
+        cb({ success = false, message = 'Failed to encode ranks data' })
+        return
+    end
+    
+    local updateResult = MySQL.query.await('UPDATE gangs SET gang_ranks = ? WHERE id = ?', { ranksJson, playerGang.id })
+    
+    if updateResult then
+        cb({ success = true, message = 'Permissions updated successfully', ranks = ranks })
+    else
+        cb({ success = false, message = 'Failed to update permissions' })
     end
 end)
 

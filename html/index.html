@@ -81,7 +81,7 @@
                     <!-- Gang Leader Section -->
                     <div class="admin-section hidden" id="gang-leader-section">
                         <div class="section-divider">
-                            <span>Gang Leader Options</span>
+                            <span>Gang Options</span>
                         </div>
 
                         <!-- Invite Player Button -->
@@ -100,6 +100,28 @@
                             </div>
                         </button>
 
+
+                        <!-- Edit Ranks Button -->
+                        <button class="menu-button" id="edit-ranks-btn" data-action="editRanks">
+                            <div class="button-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                            <div class="button-content">
+                                <span class="button-title">Edit Ranks</span>
+                                <span class="button-description">Manage gang ranks and permissions</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <!-- Gang Member Section (for players in a gang) -->
+                    <div class="section-divider hidden" id="gang-member-section-divider">
+                        <span>Gang Member Options</span>
+                    </div>
+                    <div class="admin-section hidden" id="gang-member-section">
                         <!-- View Gang Roster Button -->
                         <button class="menu-button" id="view-roster-btn" data-action="viewRoster">
                             <div class="button-icon">
@@ -115,13 +137,7 @@
                                 <span class="button-description">View and manage all gang members</span>
                             </div>
                         </button>
-                    </div>
-
-                    <!-- Gang Member Section (for players in a gang) -->
-                    <div class="section-divider hidden" id="gang-member-section-divider">
-                        <span>Gang Member Options</span>
-                    </div>
-                    <div class="admin-section hidden" id="gang-member-section">
+                        
                         <!-- Leave Gang Button -->
                         <button class="menu-button" id="leave-gang-btn" data-action="leaveGang">
                             <div class="button-icon">
@@ -361,6 +377,32 @@
                     </div>
                 </div>
 
+                <!-- Edit Ranks View -->
+                <div class="ranks-container hidden" id="ranks-container">
+                    <div class="ranks-header">
+                        <h3>Edit Ranks</h3>
+                        <button class="back-button" id="ranks-back-btn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Back
+                        </button>
+                    </div>
+                    <div class="ranks-content">
+                        <div class="ranks-actions">
+                            <button class="modal-button confirm" id="add-rank-btn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Add Rank
+                            </button>
+                        </div>
+                        <div class="ranks-list" id="ranks-list">
+                            <!-- Ranks will be dynamically inserted here -->
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Gang Roster View -->
                 <div class="roster-container hidden" id="roster-container">
                     <div class="roster-header">
@@ -388,6 +430,33 @@
                     </div>
                 </div>
 
+                <!-- Modal for Edit Player -->
+                <div class="modal hidden" id="edit-player-modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Edit Player - <span id="edit-player-name"></span></h3>
+                            <button class="modal-close" id="edit-player-close">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <label for="edit-player-rank">Rank:</label>
+                            <div class="custom-dropdown searchable-dropdown" id="edit-player-rank-dropdown">
+                                <div class="dropdown-selected">
+                                    <input type="text" class="dropdown-search-input" placeholder="Select rank..." autocomplete="off">
+                                    <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <div class="dropdown-options hidden"></div>
+                                <input type="hidden" id="edit-player-rank-value">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-button cancel" id="edit-player-cancel">Cancel</button>
+                            <button class="modal-button confirm" id="edit-player-save">Save</button>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Modal for Kick Player Confirmation -->
                 <div class="modal hidden" id="kick-player-modal">
                     <div class="modal-content">
@@ -405,6 +474,124 @@
                                 <span class="hold-button-text">Hold to Kick</span>
                                 <span class="hold-button-progress"></span>
                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal for Add Rank -->
+                <div class="modal hidden" id="add-rank-modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Add Rank</h3>
+                            <button class="modal-close" id="add-rank-close">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <label for="new-rank-name">Rank Name:</label>
+                            <input type="text" id="new-rank-name" maxlength="32" placeholder="Enter rank name">
+                            <p class="modal-hint">Rank names must be unique. Letters, numbers, and spaces only.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-button cancel" id="add-rank-cancel">Cancel</button>
+                            <button class="modal-button confirm" id="add-rank-confirm">Add Rank</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal for Delete Rank Confirmation -->
+                <div class="modal hidden" id="delete-rank-modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Delete Rank</h3>
+                            <button class="modal-close" id="delete-rank-close">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="modal-warning">Are you sure you want to delete the rank <strong id="delete-rank-name"></strong>?</p>
+                            <p class="modal-hint">Members with this rank will be set to Member. This action cannot be undone.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-button cancel" id="delete-rank-cancel">Cancel</button>
+                            <button class="modal-button danger" id="delete-rank-confirm">Delete</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Modal for Edit Permissions -->
+                <div class="modal hidden" id="edit-permissions-modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Edit Permissions - <span id="edit-permissions-rank-name"></span></h3>
+                            <button class="modal-close" id="edit-permissions-close">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="permission-invite-player" class="checkbox-input">
+                                <span class="checkbox-custom">
+                                    <svg class="checkbox-checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M11.6667 3.5L5.25 9.91667L2.33334 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                                <span>Invite Player</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="permission-kick-player" class="checkbox-input">
+                                <span class="checkbox-custom">
+                                    <svg class="checkbox-checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M11.6667 3.5L5.25 9.91667L2.33334 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                                <span>Kick Player</span>
+                            </label>
+                            <div class="permission-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="permission-edit-ranks" class="checkbox-input">
+                                    <span class="checkbox-custom">
+                                        <svg class="checkbox-checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M11.6667 3.5L5.25 9.91667L2.33334 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </span>
+                                    <span>Edit Ranks</span>
+                                </label>
+                                <label class="checkbox-label sub-checkbox hidden" id="permission-edit-rank-permissions-wrapper">
+                                    <input type="checkbox" id="permission-edit-rank-permissions" class="checkbox-input">
+                                    <span class="checkbox-custom">
+                                        <svg class="checkbox-checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M11.6667 3.5L5.25 9.91667L2.33334 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </span>
+                                    <span>Edit Rank Permissions</span>
+                                </label>
+                            </div>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="permission-edit-player" class="checkbox-input">
+                                <span class="checkbox-custom">
+                                    <svg class="checkbox-checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M11.6667 3.5L5.25 9.91667L2.33334 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                                <span>Edit Player</span>
+                            </label>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-button cancel" id="edit-permissions-cancel">Cancel</button>
+                            <button class="modal-button confirm" id="edit-permissions-save">Save</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Modal for Edit Rank Permissions Confirmation -->
+                <div class="modal hidden" id="edit-rank-permissions-warning-modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Warning: Dangerous Permission</h3>
+                            <button class="modal-close" id="edit-rank-permissions-warning-close">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="modal-warning">Giving a rank the ability to edit other ranks' permissions is a dangerous permission.</p>
+                            <p class="modal-hint">This allows them to modify permissions for other ranks, potentially granting themselves or others additional privileges.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-button cancel" id="edit-rank-permissions-warning-cancel">Cancel</button>
+                            <button class="modal-button danger" id="edit-rank-permissions-warning-confirm">I Understand, Grant Permission</button>
                         </div>
                     </div>
                 </div>

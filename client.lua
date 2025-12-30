@@ -14,18 +14,23 @@ local function OpenGangMenu()
             QBCore.Functions.TriggerCallback('envy_gangscript:getPlayerGang', function(gangData)
                 local inGang = gangData ~= nil
                 
-                isMenuOpen = true
-                SetNuiFocus(true, true)
-                
-                SendNUIMessage({
-                    action = 'openMenu',
-                    data = {
-                        logoImage = Config.LogoImage,
-                        isStaff = isStaff,
-                        isGangLeader = isGangLeader,
-                        inGang = inGang
-                    }
-                })
+                -- Get player permissions
+                QBCore.Functions.TriggerCallback('envy_gangscript:getPlayerPermissions', function(permData)
+                    isMenuOpen = true
+                    SetNuiFocus(true, true)
+                    
+                    SendNUIMessage({
+                        action = 'openMenu',
+                        data = {
+                            logoImage = Config.LogoImage,
+                            isStaff = isStaff,
+                            isGangLeader = isGangLeader,
+                            inGang = inGang,
+                            permissions = permData.permissions or {},
+                            playerLevel = permData.playerLevel or 0
+                        }
+                    })
+                end)
             end)
         end)
     end)
@@ -228,6 +233,91 @@ RegisterNUICallback('getPlayerGang', function(data, cb)
     QBCore.Functions.TriggerCallback('envy_gangscript:getPlayerGang', function(result)
         cb(result)
     end)
+end)
+
+RegisterNUICallback('getGangRanks', function(data, cb)
+    QBCore.Functions.TriggerCallback('envy_gangscript:getGangRanks', function(result)
+        cb(result)
+    end)
+end)
+
+RegisterNUICallback('addRank', function(data, cb)
+    local rankName = data.rankName
+    if not rankName then
+        cb({ success = false, message = 'Missing rank name' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:addRank', function(result)
+        cb(result)
+    end, rankName)
+end)
+
+RegisterNUICallback('deleteRank', function(data, cb)
+    local rankName = data.rankName
+    if not rankName then
+        cb({ success = false, message = 'Missing rank name' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:deleteRank', function(result)
+        cb(result)
+    end, rankName)
+end)
+
+RegisterNUICallback('reorderRanks', function(data, cb)
+    local orderedRankNames = data.orderedRankNames
+    if not orderedRankNames then
+        cb({ success = false, message = 'Missing rank order' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:reorderRanks', function(result)
+        cb(result)
+    end, orderedRankNames)
+end)
+
+RegisterNUICallback('updateRankPermission', function(data, cb)
+    local rankName = data.rankName
+    local permission = data.permission
+    local enabled = data.enabled
+    
+    if not rankName or not permission or enabled == nil then
+        cb({ success = false, message = 'Missing required data' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:updateRankPermission', function(result)
+        cb(result)
+    end, rankName, permission, enabled)
+end)
+
+RegisterNUICallback('updateRankPermissions', function(data, cb)
+    local rankName = data.rankName
+    local permissions = data.permissions
+    
+    if not rankName or not permissions then
+        cb({ success = false, message = 'Missing required data' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:updateRankPermissions', function(result)
+        cb(result)
+    end, rankName, permissions)
+end)
+
+RegisterNUICallback('editPlayerRank', function(data, cb)
+    local citizenid = data.citizenid
+    local rankName = data.rankName
+    
+    if not citizenid or not rankName then
+        cb({ success = false, message = 'Missing required data' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:editPlayerRank', function(result)
+        cb(result)
+    end, citizenid, rankName)
 end)
 
 -- Receive invite event
