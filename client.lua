@@ -230,6 +230,48 @@ RegisterNUICallback('getPlayerGang', function(data, cb)
     end)
 end)
 
+RegisterNUICallback('getGangRanks', function(data, cb)
+    QBCore.Functions.TriggerCallback('envy_gangscript:getGangRanks', function(result)
+        cb(result)
+    end)
+end)
+
+RegisterNUICallback('addRank', function(data, cb)
+    local rankName = data.rankName
+    if not rankName then
+        cb({ success = false, message = 'Missing rank name' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:addRank', function(result)
+        cb(result)
+    end, rankName)
+end)
+
+RegisterNUICallback('deleteRank', function(data, cb)
+    local rankName = data.rankName
+    if not rankName then
+        cb({ success = false, message = 'Missing rank name' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:deleteRank', function(result)
+        cb(result)
+    end, rankName)
+end)
+
+RegisterNUICallback('reorderRanks', function(data, cb)
+    local orderedRankNames = data.orderedRankNames
+    if not orderedRankNames then
+        cb({ success = false, message = 'Missing rank order' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:reorderRanks', function(result)
+        cb(result)
+    end, orderedRankNames)
+end)
+
 -- Receive invite event
 RegisterNetEvent('envy_gangscript:receiveInvite', function(inviteData)
     SendNUIMessage({

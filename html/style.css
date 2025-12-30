@@ -1798,3 +1798,184 @@ button, .close-button {
     width: 0% !important;
 }
 
+/* Ranks Editor */
+.ranks-container {
+    width: 100%;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.ranks-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.ranks-header h3 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.ranks-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.ranks-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.ranks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rank-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.rank-item:hover {
+    border-color: var(--primary-blue);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
+.rank-item.dragging {
+    opacity: 0.3;
+    cursor: grabbing;
+}
+
+.rank-item-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 10000;
+    opacity: 0.7;
+    transform: rotate(2deg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    border: 2px dashed var(--primary-blue);
+}
+
+.rank-item.draggable {
+    cursor: grab;
+}
+
+.rank-item.draggable:active {
+    cursor: grabbing;
+}
+
+.rank-item-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    color: var(--text-secondary);
+    cursor: grab;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: auto;
+}
+
+.rank-item-handle.immutable {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.rank-item-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.rank-item-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.rank-item-level {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.rank-item-permissions {
+    flex: 1;
+    padding: 8px 12px;
+    background: rgba(37, 99, 235, 0.05);
+    border-radius: 6px;
+    border: 1px dashed var(--border-color);
+}
+
+.permissions-placeholder {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-style: italic;
+    text-align: center;
+}
+
+.rank-item-delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    color: #ef4444;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.rank-item-delete:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+    transform: scale(1.05);
+}
+
+.rank-item-delete:active {
+    transform: scale(0.95);
+}
+
+.rank-item.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.rank-item.drag-over-top {
+    border-top: 3px solid var(--primary-blue);
+    box-shadow: 0 -2px 8px rgba(37, 99, 235, 0.4);
+}
+
+.rank-item.drag-over-bottom {
+    border-bottom: 3px solid var(--primary-blue);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+}
+
+.rank-drop-indicator {
+    height: 3px;
+    background: var(--primary-blue);
+    margin: 4px 0;
+    border-radius: 2px;
+    box-shadow: 0 0 8px rgba(37, 99, 235, 0.6);
+}
+

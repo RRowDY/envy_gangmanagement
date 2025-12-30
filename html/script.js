@@ -1756,8 +1756,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 closeModal('leave-gang-modal');
             } else if (!document.getElementById('kick-player-modal').classList.contains('hidden')) {
                 closeModal('kick-player-modal');
+            } else if (!document.getElementById('delete-rank-modal').classList.contains('hidden')) {
+                closeModal('delete-rank-modal');
+                pendingDeleteRankName = null;
             } else if (!document.getElementById('roster-container').classList.contains('hidden')) {
                 hideRoster();
+            } else if (!document.getElementById('ranks-container').classList.contains('hidden')) {
+                hideRanksEditor();
             } else if (!document.getElementById('invite-received-notification').classList.contains('hidden')) {
                 hideInviteNotification();
             } else if (!document.getElementById('edit-gang-cards-container').classList.contains('hidden')) {
@@ -2075,6 +2080,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Edit Ranks button
+    const editRanksBtn = document.getElementById('edit-ranks-btn');
+    if (editRanksBtn) {
+        editRanksBtn.addEventListener('click', function() {
+            showRanksEditor();
+        });
+    }
+    
     // Leave Gang button
     const leaveGangBtn = document.getElementById('leave-gang-btn');
     if (leaveGangBtn) {
@@ -2101,6 +2114,89 @@ document.addEventListener('DOMContentLoaded', function() {
     if (rosterBackBtn) {
         rosterBackBtn.addEventListener('click', function() {
             hideRoster();
+        });
+    }
+    
+    // Ranks back button
+    const ranksBackBtn = document.getElementById('ranks-back-btn');
+    if (ranksBackBtn) {
+        ranksBackBtn.addEventListener('click', function() {
+            hideRanksEditor();
+        });
+    }
+    
+    // Add Rank button
+    const addRankBtn = document.getElementById('add-rank-btn');
+    if (addRankBtn) {
+        addRankBtn.addEventListener('click', function() {
+            openModal('add-rank-modal');
+        });
+    }
+    
+    // Add Rank modal handlers
+    const addRankClose = document.getElementById('add-rank-close');
+    const addRankCancel = document.getElementById('add-rank-cancel');
+    const addRankConfirm = document.getElementById('add-rank-confirm');
+    
+    if (addRankClose) {
+        addRankClose.addEventListener('click', () => closeModal('add-rank-modal'));
+    }
+    if (addRankCancel) {
+        addRankCancel.addEventListener('click', () => closeModal('add-rank-modal'));
+    }
+    if (addRankConfirm) {
+        addRankConfirm.addEventListener('click', function() {
+            const rankName = document.getElementById('new-rank-name').value.trim();
+            
+            if (!rankName) {
+                showNotification('Please enter a rank name', 'error');
+                return;
+            }
+            
+            this.classList.add('loading');
+            this.disabled = true;
+            
+            fetch(`https://${GetParentResourceName()}/addRank`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rankName: rankName })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showNotification(result.message || 'Rank added successfully', 'success');
+                    closeModal('add-rank-modal');
+                    document.getElementById('new-rank-name').value = '';
+                    loadRanks();
+                } else {
+                    showNotification(result.message || 'Failed to add rank', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error adding rank:', error);
+                showNotification('Failed to add rank', 'error');
+            })
+            .finally(() => {
+                this.classList.remove('loading');
+                this.disabled = false;
+            });
+        });
+    }
+    
+    // Delete Rank modal handlers
+    const deleteRankClose = document.getElementById('delete-rank-close');
+    const deleteRankCancel = document.getElementById('delete-rank-cancel');
+    
+    if (deleteRankClose) {
+        deleteRankClose.addEventListener('click', () => {
+            closeModal('delete-rank-modal');
+            pendingDeleteRankName = null;
+        });
+    }
+    if (deleteRankCancel) {
+        deleteRankCancel.addEventListener('click', () => {
+            closeModal('delete-rank-modal');
+            pendingDeleteRankName = null;
         });
     }
     
@@ -2163,6 +2259,8 @@ function initHoldButtons() {
                         confirmLeaveGang();
                     } else if (buttonId === 'kick-player-confirm') {
                         confirmKickPlayer();
+                    } else if (buttonId === 'delete-rank-confirm') {
+                        confirmDeleteRank();
                     }
                 }
             }, 10);
@@ -2396,4 +2494,568 @@ function confirmKickPlayer() {
     });
 }
 
+// Ranks Editor functions
+function showRanksEditor() {
+    const menuButtons = document.getElementById('menu-buttons');
+    const ranksContainer = document.getElementById('ranks-container');
+    
+    if (menuButtons) menuButtons.classList.add('hidden');
+    if (ranksContainer) {
+        ranksContainer.classList.remove('hidden');
+        loadRanks();
+    }
+}
+
+function hideRanksEditor() {
+    const menuButtons = document.getElementById('menu-buttons');
+    const ranksContainer = document.getElementById('ranks-container');
+    
+    if (menuButtons) menuButtons.classList.remove('hidden');
+    if (ranksContainer) ranksContainer.classList.add('hidden');
+}
+
+function loadRanks() {
+    fetch(`https://${GetParentResourceName()}/getGangRanks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success && result.ranks) {
+            renderRanks(result.ranks);
+        } else {
+            showNotification(result.message || 'Failed to load ranks', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error loading ranks:', error);
+        showNotification('Failed to load ranks', 'error');
+    });
+}
+
+// Store drag and drop handlers for cleanup
+let rankDragDropHandlers = {
+    dragstart: null,
+    dragend: null,
+    dragover: null,
+    dragleave: null,
+    drop: null
+};
+
+function renderRanks(ranks) {
+    const ranksList = document.getElementById('ranks-list');
+    if (!ranksList) return;
+    
+    // Clear existing content
+    ranksList.innerHTML = '';
+    
+    ranks.forEach((rank, index) => {
+        const rankItem = document.createElement('div');
+        rankItem.className = 'rank-item';
+        rankItem.dataset.rankName = rank.name;
+        rankItem.dataset.level = rank.level;
+        
+        const isDefault = rank.name === 'boss' || rank.name === 'member';
+        const displayName = rank.name.charAt(0).toUpperCase() + rank.name.slice(1);
+        
+        rankItem.innerHTML = `
+            <div class="rank-item-handle ${isDefault ? 'immutable' : ''}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 5H15M9 12H15M9 19H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <div class="rank-item-content">
+                <div class="rank-item-name">${escapeHtml(displayName)}</div>
+                <div class="rank-item-level">Level ${rank.level}</div>
+            </div>
+            <div class="rank-item-permissions">
+                <div class="permissions-placeholder">Permissions (Coming Soon)</div>
+            </div>
+            ${!isDefault ? `<button class="rank-item-delete" data-rank-name="${rank.name}" draggable="false">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 6H5H21M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>` : ''}
+        `;
+        
+        // Add delete handler for non-default ranks
+        if (!isDefault) {
+            const deleteBtn = rankItem.querySelector('.rank-item-delete');
+            if (deleteBtn) {
+                // Prevent delete button from starting drag
+                deleteBtn.setAttribute('draggable', 'false');
+                deleteBtn.style.pointerEvents = 'auto';
+                
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    deleteRank(rank.name);
+                });
+            }
+            
+            // Make the rank item draggable using mouse events (NUI doesn't support HTML5 drag and drop)
+            rankItem.classList.add('draggable');
+            
+            rankItem.addEventListener('mousedown', function(e) {
+                // Don't start drag if clicking on delete button
+                if (e.target.closest('.rank-item-delete')) {
+                    return;
+                }
+                
+                window.rankDragState = {
+                    isDragging: true,
+                    draggedElement: this,
+                    ghostElement: null,
+                    offsetX: e.clientX - this.getBoundingClientRect().left,
+                    offsetY: e.clientY - this.getBoundingClientRect().top
+                };
+                
+                this.classList.add('dragging');
+                
+                // Create ghost element
+                const ghost = this.cloneNode(true);
+                ghost.classList.add('rank-item-ghost');
+                ghost.classList.remove('dragging');
+                ghost.style.position = 'fixed';
+                ghost.style.pointerEvents = 'none';
+                ghost.style.zIndex = '10000';
+                ghost.style.width = this.offsetWidth + 'px';
+                ghost.style.opacity = '0.7';
+                document.body.appendChild(ghost);
+                window.rankDragState.ghostElement = ghost;
+                
+                // Position ghost at cursor
+                ghost.style.left = (e.clientX - window.rankDragState.offsetX) + 'px';
+                ghost.style.top = (e.clientY - window.rankDragState.offsetY) + 'px';
+                
+                // Prevent text selection during drag
+                e.preventDefault();
+                
+                console.log('Mouse drag started on', this.dataset.rankName);
+            });
+        } else {
+            rankItem.setAttribute('draggable', 'false');
+        }
+        
+        ranksList.appendChild(rankItem);
+    });
+    
+    // Initialize mouse-based drag and drop (NUI doesn't support HTML5 drag and drop)
+    initRankMouseDragDrop();
+}
+
+// Mouse-based drag and drop for NUI (HTML5 drag and drop not supported)
+function initRankMouseDragDrop() {
+    const ranksList = document.getElementById('ranks-list');
+    if (!ranksList) return;
+    
+    // Initialize drag state
+    if (!window.rankDragState) {
+        window.rankDragState = {
+            isDragging: false,
+            draggedElement: null
+        };
+    }
+    
+    // Global mousemove handler - only add once
+    if (!window.rankDragMouseMoveHandler) {
+        window.rankDragMouseMoveHandler = function(e) {
+            if (!window.rankDragState || !window.rankDragState.isDragging || !window.rankDragState.draggedElement) return;
+            
+            const ranksList = document.getElementById('ranks-list');
+            if (!ranksList) return;
+            
+            // Update ghost position
+            if (window.rankDragState.ghostElement) {
+                window.rankDragState.ghostElement.style.left = (e.clientX - window.rankDragState.offsetX) + 'px';
+                window.rankDragState.ghostElement.style.top = (e.clientY - window.rankDragState.offsetY) + 'px';
+            }
+            
+            // Find which rank item we're hovering over - improved detection
+            const allItems = ranksList.querySelectorAll('.rank-item');
+            let hoveredItem = null;
+            let hoverPosition = null; // 'above' or 'below'
+            
+            // Check all items to find the closest one based on Y position
+            for (const item of allItems) {
+                if (item === window.rankDragState.draggedElement) continue;
+                
+                const rect = item.getBoundingClientRect();
+                const midpoint = rect.top + rect.height / 2;
+                
+                // Check if cursor is within horizontal bounds
+                if (e.clientX >= rect.left && e.clientX <= rect.right) {
+                    // Check if cursor is above or below the midpoint
+                    if (e.clientY < midpoint && e.clientY >= rect.top - 20) {
+                        // Cursor is in the top half
+                        hoveredItem = item;
+                        hoverPosition = 'above';
+                        break;
+                    } else if (e.clientY >= midpoint && e.clientY <= rect.bottom + 20) {
+                        // Cursor is in the bottom half
+                        hoveredItem = item;
+                        hoverPosition = 'below';
+                        break;
+                    }
+                }
+            }
+            
+            // Clear all indicators
+            allItems.forEach(item => {
+                item.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
+            
+            if (hoveredItem && hoveredItem !== window.rankDragState.draggedElement) {
+                const isDefault = hoveredItem.dataset.rankName === 'boss' || hoveredItem.dataset.rankName === 'member';
+                if (!isDefault) {
+                    if (hoverPosition === 'above') {
+                        hoveredItem.classList.add('drag-over-top');
+                    } else {
+                        hoveredItem.classList.add('drag-over-bottom');
+                    }
+                }
+            }
+        };
+        
+        document.addEventListener('mousemove', window.rankDragMouseMoveHandler);
+    }
+    
+    // Global mouseup handler - only add once
+    if (!window.rankDragMouseUpHandler) {
+        window.rankDragMouseUpHandler = function(e) {
+            if (!window.rankDragState || !window.rankDragState.isDragging || !window.rankDragState.draggedElement) return;
+            
+            const ranksList = document.getElementById('ranks-list');
+            if (!ranksList) return;
+            
+            const draggedElement = window.rankDragState.draggedElement;
+            draggedElement.classList.remove('dragging');
+            
+            // Remove ghost element
+            if (window.rankDragState.ghostElement) {
+                window.rankDragState.ghostElement.remove();
+                window.rankDragState.ghostElement = null;
+            }
+            
+            // Find which rank item we're dropping on - improved detection
+            const allItems = ranksList.querySelectorAll('.rank-item');
+            let dropTarget = null;
+            let dropPosition = null; // 'above' or 'below'
+            
+            // Check all items to find the closest one based on Y position
+            for (const item of allItems) {
+                if (item === draggedElement) continue;
+                
+                const rect = item.getBoundingClientRect();
+                const midpoint = rect.top + rect.height / 2;
+                
+                // Check if cursor is within horizontal bounds
+                if (e.clientX >= rect.left && e.clientX <= rect.right) {
+                    // Check if cursor is above or below the midpoint
+                    if (e.clientY < midpoint && e.clientY >= rect.top - 20) {
+                        // Cursor is in the top half
+                        dropTarget = item;
+                        dropPosition = 'above';
+                        break;
+                    } else if (e.clientY >= midpoint && e.clientY <= rect.bottom + 20) {
+                        // Cursor is in the bottom half
+                        dropTarget = item;
+                        dropPosition = 'below';
+                        break;
+                    }
+                }
+            }
+            
+            // Clear all indicators
+            allItems.forEach(item => {
+                item.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
+            
+            if (dropTarget && dropTarget !== draggedElement) {
+                const isDefault = dropTarget.dataset.rankName === 'boss' || dropTarget.dataset.rankName === 'member';
+                if (!isDefault) {
+                    if (dropPosition === 'above') {
+                        ranksList.insertBefore(draggedElement, dropTarget);
+                    } else {
+                        const memberItem = ranksList.querySelector('[data-rank-name="member"]');
+                        if (memberItem && dropTarget.nextSibling === memberItem) {
+                            ranksList.insertBefore(draggedElement, memberItem);
+                        } else {
+                            ranksList.insertBefore(draggedElement, dropTarget.nextSibling);
+                        }
+                    }
+                    
+                    // Save the new order
+                    saveRankOrder();
+                }
+            }
+            
+            window.rankDragState.isDragging = false;
+            window.rankDragState.draggedElement = null;
+            window.rankDragState.offsetX = null;
+            window.rankDragState.offsetY = null;
+        };
+        
+        document.addEventListener('mouseup', window.rankDragMouseUpHandler);
+    }
+}
+
+function initRankDragDrop() {
+    const ranksList = document.getElementById('ranks-list');
+    if (!ranksList) {
+        console.log('initRankDragDrop: ranks-list not found');
+        return;
+    }
+    
+    console.log('initRankDragDrop: initializing drag and drop');
+    
+    // Remove old event listeners from container if they exist
+    if (rankDragDropHandlers.dragover) {
+        ranksList.removeEventListener('dragover', rankDragDropHandlers.dragover);
+        ranksList.removeEventListener('dragleave', rankDragDropHandlers.dragleave);
+        ranksList.removeEventListener('drop', rankDragDropHandlers.drop);
+    }
+    
+    // Create container event handlers for dragover/drop - following W3Schools pattern
+    rankDragDropHandlers.dragover = function(e) {
+        // Always prevent default to allow drop - this is required per W3Schools
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Set dropEffect to show it's allowed
+        e.dataTransfer.dropEffect = 'move';
+        
+        if (!window.draggedRankElement) {
+            console.log('dragover: no dragged element');
+            return false;
+        }
+        
+        const item = e.target.closest('.rank-item');
+        if (!item || item === window.draggedRankElement) {
+            // Clear indicators if not over a valid item
+            ranksList.querySelectorAll('.rank-item').forEach(i => {
+                i.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
+            return false;
+        }
+        
+        const bossItem = ranksList.querySelector('[data-rank-name="boss"]');
+        const memberItem = ranksList.querySelector('[data-rank-name="member"]');
+        
+        // Don't allow dropping on boss or member
+        if (item === bossItem || item === memberItem) {
+            e.dataTransfer.dropEffect = 'none';
+            ranksList.querySelectorAll('.rank-item').forEach(i => {
+                i.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
+            return false;
+        }
+        
+        // Determine if we should drop above or below
+        const rect = item.getBoundingClientRect();
+        const y = e.clientY;
+        const midpoint = rect.top + rect.height / 2;
+        
+        // Clear all indicators first
+        ranksList.querySelectorAll('.rank-item').forEach(i => {
+            i.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+        
+        // Show visual feedback
+        if (y < midpoint) {
+            // Drop above
+            item.classList.add('drag-over-top');
+        } else {
+            // Drop below
+            item.classList.add('drag-over-bottom');
+        }
+        
+        return false;
+    };
+    
+    rankDragDropHandlers.dragleave = function(e) {
+        // Only clear if we're leaving the ranks list entirely
+        if (!ranksList.contains(e.relatedTarget)) {
+            ranksList.querySelectorAll('.rank-item').forEach(item => {
+                item.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
+        }
+    };
+    
+    rankDragDropHandlers.drop = function(e) {
+        // Prevent default behavior - required per W3Schools
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log('drop event fired', e.target);
+        
+        if (!window.draggedRankElement) {
+            console.log('drop: no dragged element');
+            return false;
+        }
+        
+        // Get the data - using "text" as per W3Schools example
+        const data = e.dataTransfer.getData('text');
+        console.log('drop: data retrieved', data);
+        if (!data) return false;
+        
+        const item = e.target.closest('.rank-item');
+        console.log('drop: target item', item);
+        if (!item || item === window.draggedRankElement) return false;
+        
+        const bossItem = ranksList.querySelector('[data-rank-name="boss"]');
+        const memberItem = ranksList.querySelector('[data-rank-name="member"]');
+        
+        // Don't allow dropping on boss or member
+        if (item === bossItem || item === memberItem) {
+            return false;
+        }
+        
+        // Determine drop position
+        const rect = item.getBoundingClientRect();
+        const y = e.clientY;
+        const midpoint = rect.top + rect.height / 2;
+        
+        // Clear indicators
+        ranksList.querySelectorAll('.rank-item').forEach(i => {
+            i.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+        
+        // Move the element
+        if (y < midpoint) {
+            // Insert before this item
+            ranksList.insertBefore(window.draggedRankElement, item);
+        } else {
+            // Insert after this item (but before member if this is the last custom rank)
+            if (memberItem && item.nextSibling === memberItem) {
+                ranksList.insertBefore(window.draggedRankElement, memberItem);
+            } else {
+                ranksList.insertBefore(window.draggedRankElement, item.nextSibling);
+            }
+        }
+        
+        // Save the new order
+        saveRankOrder();
+        
+        return false;
+    };
+    
+    // Add event listeners to container for dragover/drop
+    ranksList.addEventListener('dragover', rankDragDropHandlers.dragover, false);
+    ranksList.addEventListener('dragleave', rankDragDropHandlers.dragleave, false);
+    ranksList.addEventListener('drop', rankDragDropHandlers.drop, false);
+    
+    console.log('initRankDragDrop: event listeners attached to ranks-list');
+    
+    // Also attach to each rank item as a fallback to ensure dragover fires
+    ranksList.querySelectorAll('.rank-item').forEach(item => {
+        item.addEventListener('dragover', rankDragDropHandlers.dragover, false);
+        item.addEventListener('drop', rankDragDropHandlers.drop, false);
+    });
+    
+    console.log('initRankDragDrop: event listeners also attached to individual items');
+}
+
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.rank-item:not(.dragging)')];
+    
+    return draggableElements.reduce((closest, child) => {
+        // Skip boss and member for positioning
+        if (child.dataset.rankName === 'boss' || child.dataset.rankName === 'member') {
+            return closest;
+        }
+        
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+function saveRankOrder() {
+    const ranksList = document.getElementById('ranks-list');
+    if (!ranksList) return;
+    
+    const rankItems = ranksList.querySelectorAll('.rank-item');
+    const orderedRankNames = [];
+    
+    rankItems.forEach(item => {
+        orderedRankNames.push(item.dataset.rankName);
+    });
+    
+    fetch(`https://${GetParentResourceName()}/reorderRanks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedRankNames: orderedRankNames })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            renderRanks(result.ranks);
+            showNotification(result.message || 'Ranks reordered successfully', 'success');
+        } else {
+            showNotification(result.message || 'Failed to reorder ranks', 'error');
+            loadRanks(); // Reload to reset order
+        }
+    })
+    .catch(error => {
+        console.error('Error reordering ranks:', error);
+        showNotification('Failed to reorder ranks', 'error');
+        loadRanks(); // Reload to reset order
+    });
+}
+
+let pendingDeleteRankName = null;
+
+function deleteRank(rankName) {
+    pendingDeleteRankName = rankName;
+    const displayName = rankName.charAt(0).toUpperCase() + rankName.slice(1);
+    const nameSpan = document.getElementById('delete-rank-name');
+    if (nameSpan) nameSpan.textContent = displayName;
+    openModal('delete-rank-modal');
+}
+
+function confirmDeleteRank() {
+    if (!pendingDeleteRankName) return;
+    
+    const confirmBtn = document.getElementById('delete-rank-confirm');
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.classList.add('loading');
+    }
+    
+    fetch(`https://${GetParentResourceName()}/deleteRank`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rankName: pendingDeleteRankName })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showNotification(result.message || 'Rank deleted successfully', 'success');
+            closeModal('delete-rank-modal');
+            pendingDeleteRankName = null;
+            renderRanks(result.ranks);
+        } else {
+            showNotification(result.message || 'Failed to delete rank', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting rank:', error);
+        showNotification('Failed to delete rank', 'error');
+    })
+    .finally(() => {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.classList.remove('loading');
+            const progressBar = confirmBtn.querySelector('.hold-button-progress');
+            if (progressBar) progressBar.style.width = '0%';
+        }
+    });
+}
 
