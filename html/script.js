@@ -2559,6 +2559,11 @@ function renderRoster(roster) {
             onlineBadge.className = 'online-badge';
             onlineBadge.title = 'Online';
             nameCell.appendChild(onlineBadge);
+        } else {
+            const offlineBadge = document.createElement('span');
+            offlineBadge.className = 'offline-badge';
+            offlineBadge.title = 'Offline';
+            nameCell.appendChild(offlineBadge);
         }
         
         const rankCell = document.createElement('td');

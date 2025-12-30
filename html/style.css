@@ -153,16 +153,7 @@ body {
     background-repeat: no-repeat;
     border-radius: 10px;
     position: relative;
-    animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-    0%, 100% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.05);
-    }
+    animation: logo-pulse 2s ease-in-out infinite;
 }
 
 .menu-title {
@@ -1741,6 +1732,25 @@ button, .close-button {
     animation: pulse 2s infinite;
 }
 
+.offline-badge {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #6b7280;
+    border-radius: 50%;
+    margin-left: 8px;
+    vertical-align: middle;
+    box-shadow: 0 0 4px rgba(107, 114, 128, 0.4);
+}
+
+@keyframes logo-pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
