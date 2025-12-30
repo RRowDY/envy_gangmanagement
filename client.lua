@@ -14,18 +14,23 @@ local function OpenGangMenu()
             QBCore.Functions.TriggerCallback('envy_gangscript:getPlayerGang', function(gangData)
                 local inGang = gangData ~= nil
                 
-                isMenuOpen = true
-                SetNuiFocus(true, true)
-                
-                SendNUIMessage({
-                    action = 'openMenu',
-                    data = {
-                        logoImage = Config.LogoImage,
-                        isStaff = isStaff,
-                        isGangLeader = isGangLeader,
-                        inGang = inGang
-                    }
-                })
+                -- Get player permissions
+                QBCore.Functions.TriggerCallback('envy_gangscript:getPlayerPermissions', function(permData)
+                    isMenuOpen = true
+                    SetNuiFocus(true, true)
+                    
+                    SendNUIMessage({
+                        action = 'openMenu',
+                        data = {
+                            logoImage = Config.LogoImage,
+                            isStaff = isStaff,
+                            isGangLeader = isGangLeader,
+                            inGang = inGang,
+                            permissions = permData.permissions or {},
+                            playerLevel = permData.playerLevel or 0
+                        }
+                    })
+                end)
             end)
         end)
     end)
@@ -270,6 +275,21 @@ RegisterNUICallback('reorderRanks', function(data, cb)
     QBCore.Functions.TriggerCallback('envy_gangscript:reorderRanks', function(result)
         cb(result)
     end, orderedRankNames)
+end)
+
+RegisterNUICallback('updateRankPermission', function(data, cb)
+    local rankName = data.rankName
+    local permission = data.permission
+    local enabled = data.enabled
+    
+    if not rankName or not permission or enabled == nil then
+        cb({ success = false, message = 'Missing required data' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:updateRankPermission', function(result)
+        cb(result)
+    end, rankName, permission, enabled)
 end)
 
 -- Receive invite event

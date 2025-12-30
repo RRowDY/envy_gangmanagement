@@ -117,6 +117,23 @@ function openMenu(data) {
     if (gangLeaderSection) {
         if (data && data.isGangLeader) {
             gangLeaderSection.classList.remove('hidden');
+            
+            // Enable/disable buttons based on permissions
+            const invitePlayerBtn = document.getElementById('invite-player-btn');
+            if (invitePlayerBtn) {
+                invitePlayerBtn.disabled = !(data.permissions && data.permissions.invite_player);
+                if (!(data.permissions && data.permissions.invite_player)) {
+                    invitePlayerBtn.title = 'You do not have permission to invite players';
+                }
+            }
+            
+            const editRanksBtn = document.getElementById('edit-ranks-btn');
+            if (editRanksBtn) {
+                editRanksBtn.disabled = !(data.permissions && data.permissions.edit_ranks);
+                if (!(data.permissions && data.permissions.edit_ranks)) {
+                    editRanksBtn.title = 'You do not have permission to edit ranks';
+                }
+            }
         } else {
             gangLeaderSection.classList.add('hidden');
         }
@@ -394,6 +411,7 @@ function closeAllModals() {
     closeModal('create-gang-modal');
     closeModal('delete-confirm-modal');
     closeModal('edit-gang-modal');
+    closeModal('edit-permissions-modal');
 }
 
 // Show gang cards view
@@ -2136,6 +2154,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add Rank modal handlers
     const addRankClose = document.getElementById('add-rank-close');
     const addRankCancel = document.getElementById('add-rank-cancel');
+    
+    // Edit Permissions Modal handlers
+    const editPermissionsClose = document.getElementById('edit-permissions-close');
+    const editPermissionsCancel = document.getElementById('edit-permissions-cancel');
+    const editPermissionsSave = document.getElementById('edit-permissions-save');
+    
+    if (editPermissionsClose) {
+        editPermissionsClose.addEventListener('click', closeEditPermissionsModal);
+    }
+    
+    if (editPermissionsCancel) {
+        editPermissionsCancel.addEventListener('click', closeEditPermissionsModal);
+    }
+    
+    if (editPermissionsSave) {
+        editPermissionsSave.addEventListener('click', savePermissions);
+    }
     const addRankConfirm = document.getElementById('add-rank-confirm');
     
     if (addRankClose) {
@@ -2364,10 +2399,21 @@ function renderRoster(roster) {
         const editBtn = document.createElement('button');
         editBtn.className = 'roster-edit-btn';
         editBtn.textContent = 'Edit';
-        editBtn.disabled = member.isLeader;
+        
+        // Disable button if: leader, no permission, or same/higher level
+        const playerLevel = menuData && menuData.playerLevel ? menuData.playerLevel : 0;
+        const hasKickPermission = menuData && menuData.permissions && menuData.permissions.kick_player;
+        const canKick = member.canKick !== false && hasKickPermission && playerLevel > (member.level || 0);
+        
+        editBtn.disabled = member.isLeader || !canKick;
         if (member.isLeader) {
             editBtn.title = 'Cannot kick gang leader';
+        } else if (!hasKickPermission) {
+            editBtn.title = 'You do not have permission to kick players';
+        } else if (playerLevel <= (member.level || 0)) {
+            editBtn.title = 'You cannot kick players of the same or higher level';
         }
+        
         editBtn.addEventListener('click', () => openKickPlayerModal(member.citizenid, member.charname, member.isLeader));
         actionsCell.appendChild(editBtn);
         
@@ -2559,6 +2605,11 @@ function renderRanks(ranks) {
         const isDefault = rank.name === 'boss' || rank.name === 'member';
         const displayName = rank.name.charAt(0).toUpperCase() + rank.name.slice(1);
         
+        // Check if player can delete this rank (level-based restriction)
+        const playerLevel = menuData && menuData.playerLevel ? menuData.playerLevel : 0;
+        const rankLevel = rank.level || 0;
+        const canDelete = !isDefault && playerLevel > rankLevel;
+        
         rankItem.innerHTML = `
             <div class="rank-item-handle ${isDefault ? 'immutable' : ''}">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2570,9 +2621,11 @@ function renderRanks(ranks) {
                 <div class="rank-item-level">Level ${rank.level}</div>
             </div>
             <div class="rank-item-permissions">
-                <div class="permissions-placeholder">Permissions (Coming Soon)</div>
+                ${rank.name === 'boss' ? '<div class="permissions-placeholder">All Permissions</div>' : rank.name === 'member' ? '<div class="permissions-placeholder">No Permissions</div>' : `
+                    <button class="edit-permissions-btn" data-rank-name="${rank.name}">Edit Permissions</button>
+                `}
             </div>
-            ${!isDefault ? `<button class="rank-item-delete" data-rank-name="${rank.name}" draggable="false">
+            ${!isDefault ? `<button class="rank-item-delete ${!canDelete ? 'disabled' : ''}" data-rank-name="${rank.name}" draggable="false" ${!canDelete ? 'disabled title="You cannot delete ranks of the same or higher level"' : ''}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3 6H5H21M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
@@ -2597,9 +2650,20 @@ function renderRanks(ranks) {
             // Make the rank item draggable using mouse events (NUI doesn't support HTML5 drag and drop)
             rankItem.classList.add('draggable');
             
+            // Add "Edit Permissions" button handler
+            const editPermissionsBtn = rankItem.querySelector('.edit-permissions-btn');
+            if (editPermissionsBtn) {
+                editPermissionsBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const rankName = this.dataset.rankName;
+                    openEditPermissionsModal(rankName, rank);
+                });
+            }
+            
             rankItem.addEventListener('mousedown', function(e) {
-                // Don't start drag if clicking on delete button
-                if (e.target.closest('.rank-item-delete')) {
+                // Don't start drag if clicking on delete button, edit permissions button, or permission checkboxes
+                if (e.target.closest('.rank-item-delete') || e.target.closest('.edit-permissions-btn') || e.target.closest('.permission-input') || e.target.closest('.permission-checkbox')) {
                     return;
                 }
                 
@@ -3020,6 +3084,139 @@ function saveRankOrder() {
         console.error('Error reordering ranks:', error);
         showNotification('Failed to reorder ranks', 'error');
         loadRanks(); // Reload to reset order
+    });
+}
+
+let currentEditingRank = null;
+let originalPermissions = null;
+
+function openEditPermissionsModal(rankName, rankData) {
+    currentEditingRank = rankName;
+    originalPermissions = rankData.permissions ? { ...rankData.permissions } : {};
+    
+    const modal = document.getElementById('edit-permissions-modal');
+    const rankNameSpan = document.getElementById('edit-permissions-rank-name');
+    const inviteCheckbox = document.getElementById('permission-invite-player');
+    const kickCheckbox = document.getElementById('permission-kick-player');
+    const editRanksCheckbox = document.getElementById('permission-edit-ranks');
+    
+    if (!modal || !rankNameSpan || !inviteCheckbox || !kickCheckbox || !editRanksCheckbox) return;
+    
+    // Capitalize first letter of rank name
+    const displayName = rankName.charAt(0).toUpperCase() + rankName.slice(1);
+    rankNameSpan.textContent = displayName;
+    
+    // Set checkbox states
+    inviteCheckbox.checked = originalPermissions.invite_player || false;
+    kickCheckbox.checked = originalPermissions.kick_player || false;
+    editRanksCheckbox.checked = originalPermissions.edit_ranks || false;
+    
+    // Show modal
+    modal.classList.remove('hidden');
+}
+
+function closeEditPermissionsModal() {
+    closeModal('edit-permissions-modal');
+    currentEditingRank = null;
+    originalPermissions = null;
+}
+
+function savePermissions() {
+    if (!currentEditingRank) return;
+    
+    const inviteCheckbox = document.getElementById('permission-invite-player');
+    const kickCheckbox = document.getElementById('permission-kick-player');
+    const editRanksCheckbox = document.getElementById('permission-edit-ranks');
+    
+    if (!inviteCheckbox || !kickCheckbox || !editRanksCheckbox) return;
+    
+    const permissions = {
+        invite_player: inviteCheckbox.checked,
+        kick_player: kickCheckbox.checked,
+        edit_ranks: editRanksCheckbox.checked
+    };
+    
+    // Check if any permissions changed
+    const hasChanges = 
+        permissions.invite_player !== (originalPermissions.invite_player || false) ||
+        permissions.kick_player !== (originalPermissions.kick_player || false) ||
+        permissions.edit_ranks !== (originalPermissions.edit_ranks || false);
+    
+    if (!hasChanges) {
+        closeEditPermissionsModal();
+        return;
+    }
+    
+    // Save each permission that changed
+    const promises = [];
+    if (permissions.invite_player !== (originalPermissions.invite_player || false)) {
+        promises.push(updateSinglePermission(currentEditingRank, 'invite_player', permissions.invite_player));
+    }
+    if (permissions.kick_player !== (originalPermissions.kick_player || false)) {
+        promises.push(updateSinglePermission(currentEditingRank, 'kick_player', permissions.kick_player));
+    }
+    if (permissions.edit_ranks !== (originalPermissions.edit_ranks || false)) {
+        promises.push(updateSinglePermission(currentEditingRank, 'edit_ranks', permissions.edit_ranks));
+    }
+    
+    Promise.all(promises)
+        .then(() => {
+            showNotification('Permissions updated successfully', 'success');
+            closeEditPermissionsModal();
+            loadRanks(); // Reload to refresh the UI
+        })
+        .catch(error => {
+            console.error('Error saving permissions:', error);
+            showNotification('Failed to save permissions', 'error');
+            loadRanks(); // Reload to revert changes
+        });
+}
+
+function updateSinglePermission(rankName, permission, enabled) {
+    return fetch(`https://${GetParentResourceName()}/updateRankPermission`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            rankName: rankName,
+            permission: permission,
+            enabled: enabled
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (!result.success) {
+            throw new Error(result.message || 'Failed to update permission');
+        }
+        return result;
+    });
+}
+
+function updateRankPermission(rankName, permission, enabled) {
+    fetch(`https://${GetParentResourceName()}/updateRankPermission`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            rankName: rankName,
+            permission: permission,
+            enabled: enabled
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            // Reload ranks to get updated permissions
+            loadRanks();
+        } else {
+            showNotification(result.message || 'Failed to update permission', 'error');
+            // Reload to revert checkbox state
+            loadRanks();
+        }
+    })
+    .catch(error => {
+        console.error('Error updating permission:', error);
+        showNotification('Failed to update permission', 'error');
+        // Reload to revert checkbox state
+        loadRanks();
     });
 }
 

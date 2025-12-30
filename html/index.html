@@ -489,6 +489,49 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Modal for Edit Permissions -->
+                <div class="modal hidden" id="edit-permissions-modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Edit Permissions - <span id="edit-permissions-rank-name"></span></h3>
+                            <button class="modal-close" id="edit-permissions-close">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="permission-invite-player" class="checkbox-input">
+                                <span class="checkbox-custom">
+                                    <svg class="checkbox-checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M11.6667 3.5L5.25 9.91667L2.33334 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                                <span>Invite Player</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="permission-kick-player" class="checkbox-input">
+                                <span class="checkbox-custom">
+                                    <svg class="checkbox-checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M11.6667 3.5L5.25 9.91667L2.33334 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                                <span>Kick Player</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="permission-edit-ranks" class="checkbox-input">
+                                <span class="checkbox-custom">
+                                    <svg class="checkbox-checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M11.6667 3.5L5.25 9.91667L2.33334 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                                <span>Edit Ranks</span>
+                            </label>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-button cancel" id="edit-permissions-cancel">Cancel</button>
+                            <button class="modal-button confirm" id="edit-permissions-save">Save</button>
+                        </div>
+                    </div>
+                </div>
 
             </div>
         </div>
