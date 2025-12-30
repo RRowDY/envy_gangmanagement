@@ -77,6 +77,14 @@ window.addEventListener('message', function(event) {
         case 'closeMenu':
             closeMenu();
             break;
+        case 'receiveInvite':
+            handleReceiveInvite(data.data);
+            break;
+        case 'showNotification':
+            if (data.data && data.data.message) {
+                showNotification(data.data.message, data.data.type || 'info');
+            }
+            break;
     }
 });
 
@@ -101,6 +109,16 @@ function openMenu(data) {
             staffSection.classList.remove('hidden');
         } else {
             staffSection.classList.add('hidden');
+        }
+    }
+    
+    // Show/hide gang leader section
+    const gangLeaderSection = document.getElementById('gang-leader-section');
+    if (gangLeaderSection) {
+        if (data && data.isGangLeader) {
+            gangLeaderSection.classList.remove('hidden');
+        } else {
+            gangLeaderSection.classList.add('hidden');
         }
     }
     
@@ -1708,6 +1726,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentEditGangId = null;
             } else if (!document.getElementById('create-gang-modal').classList.contains('hidden')) {
                 closeModal('create-gang-modal');
+            } else if (!document.getElementById('invite-player-modal').classList.contains('hidden')) {
+                closeModal('invite-player-modal');
+            } else if (!document.getElementById('invite-received-notification').classList.contains('hidden')) {
+                hideInviteNotification();
             } else if (!document.getElementById('edit-gang-cards-container').classList.contains('hidden')) {
                 hideEditGangCards();
             } else if (!document.getElementById('gang-cards-container').classList.contains('hidden')) {
@@ -1722,5 +1744,297 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+    
+    // Invite Player button
+    const invitePlayerBtn = document.getElementById('invite-player-btn');
+    if (invitePlayerBtn) {
+        invitePlayerBtn.addEventListener('click', function() {
+            openInvitePlayerModal();
+        });
+    }
+    
+    // Invite Player modal handlers
+    const invitePlayerModal = document.getElementById('invite-player-modal');
+    const invitePlayerClose = document.getElementById('invite-player-close');
+    const invitePlayerCancel = document.getElementById('invite-player-cancel');
+    const invitePlayerConfirm = document.getElementById('invite-player-confirm');
+    
+    if (invitePlayerClose) {
+        invitePlayerClose.addEventListener('click', () => closeModal('invite-player-modal'));
+    }
+    if (invitePlayerCancel) {
+        invitePlayerCancel.addEventListener('click', () => closeModal('invite-player-modal'));
+    }
+    if (invitePlayerConfirm) {
+        invitePlayerConfirm.addEventListener('click', function() {
+            const targetCitizenid = document.getElementById('invite-player-id').value;
+            
+            if (!targetCitizenid) {
+                showNotification('Please select a player to invite', 'error');
+                return;
+            }
+            
+            // Add loading state
+            this.classList.add('loading');
+            this.disabled = true;
+            
+            fetch(`https://${GetParentResourceName()}/invitePlayer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetCitizenid: targetCitizenid })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showNotification(result.message || 'Invite sent successfully', 'success');
+                    closeModal('invite-player-modal');
+                    // Reset dropdown
+                    const dropdown = document.getElementById('invite-player-dropdown');
+                    if (dropdown) {
+                        const searchInput = document.getElementById('invite-player-search');
+                        const hiddenInput = document.getElementById('invite-player-id');
+                        if (searchInput) searchInput.value = '';
+                        if (hiddenInput) hiddenInput.value = '';
+                    }
+                } else {
+                    showNotification(result.message || 'Failed to send invite', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error inviting player:', error);
+                showNotification('Failed to send invite', 'error');
+            })
+            .finally(() => {
+                this.classList.remove('loading');
+                this.disabled = false;
+            });
+        });
+    }
+    
+    // Invite Received notification handlers
+    let currentInviteId = null;
+    let inviteCountdownInterval = null;
+    let inviteCountdownSeconds = 30;
+    
+    // Function to hide invite notification with slide-out animation
+    function hideInviteNotification() {
+        const notification = document.getElementById('invite-received-notification');
+        if (notification) {
+            // Remove show class to trigger slide-out animation
+            notification.classList.remove('show');
+            // Wait for animation to complete before hiding
+            setTimeout(() => {
+                notification.classList.add('hidden');
+            }, 400); // Match CSS transition duration
+        }
+        if (inviteCountdownInterval) {
+            clearInterval(inviteCountdownInterval);
+            inviteCountdownInterval = null;
+        }
+        inviteCountdownSeconds = 30;
+        currentInviteId = null;
+        
+        // Notify client that notification is closed
+        fetch(`https://${GetParentResourceName()}/inviteNotificationClosed`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        }).catch(err => console.error('Error notifying client:', err));
+    }
+    
+    // Function to accept invite
+    function acceptInvite() {
+        if (!currentInviteId) return;
+        
+        const inviteId = currentInviteId;
+        hideInviteNotification();
+        
+        fetch(`https://${GetParentResourceName()}/acceptInvite`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inviteId: inviteId })
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                showNotification(result.message || 'You joined the gang!', 'success');
+            } else {
+                showNotification(result.message || 'Failed to accept invite', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error accepting invite:', error);
+            showNotification('Failed to accept invite', 'error');
+        });
+    }
+    
+    // Function to deny invite
+    function denyInvite() {
+        if (!currentInviteId) return;
+        
+        const inviteId = currentInviteId;
+        hideInviteNotification();
+        
+        fetch(`https://${GetParentResourceName()}/denyInvite`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inviteId: inviteId })
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                showNotification(result.message || 'Invite declined', 'info');
+            } else {
+                showNotification(result.message || 'Failed to decline invite', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error denying invite:', error);
+            showNotification('Failed to deny invite', 'error');
+        });
+    }
+    
+    // Handle key presses from client.lua (FiveM NUI keyboard handling)
+    window.addEventListener('message', function(event) {
+        if (event.data.action === 'inviteKeyPress') {
+            const notification = document.getElementById('invite-received-notification');
+            if (!notification || notification.classList.contains('hidden')) return;
+            
+            if (event.data.key === 'accept') {
+                console.log('[envy_gangscript] G key pressed - accepting invite');
+                acceptInvite();
+            } else if (event.data.key === 'deny') {
+                console.log('[envy_gangscript] J key pressed - denying invite');
+                denyInvite();
+            }
+        }
+    });
+    
+    // Function to open invite player modal
+    window.openInvitePlayerModal = function() {
+        const modal = document.getElementById('invite-player-modal');
+        if (!modal) return;
+        
+        // Reset dropdown
+        const searchInput = document.getElementById('invite-player-search');
+        const hiddenInput = document.getElementById('invite-player-id');
+        const optionsContainer = document.getElementById('invite-player-options');
+        if (searchInput) searchInput.value = '';
+        if (hiddenInput) hiddenInput.value = '';
+        if (optionsContainer) optionsContainer.innerHTML = '';
+        
+        // Load online players
+        fetch(`https://${GetParentResourceName()}/getOnlinePlayersForInvite`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        })
+        .then(response => response.json())
+        .then(players => {
+            console.log('[envy_gangscript] Received players for invite:', players);
+            if (!players || players.length === 0) {
+                showNotification('No players available to invite', 'warning');
+                return;
+            }
+            
+            // Format players for dropdown (needs value, text, and searchText)
+            const playerOptions = players.map(player => ({
+                value: player.citizenid,
+                text: player.name,
+                searchText: (player.name || '').toLowerCase() + ' ' + (player.citizenid || '').toLowerCase(),
+                citizenid: player.citizenid,
+                name: player.name
+            }));
+            
+            console.log('[envy_gangscript] Formatted player options:', playerOptions);
+            
+            // Create dropdown options
+            const dropdown = createSearchableDropdown('invite-player-dropdown', playerOptions, '', 'Select a player...');
+            if (dropdown) {
+                dropdown.onSelect = function(option) {
+                    document.getElementById('invite-player-id').value = option.citizenid || option.value;
+                };
+            } else {
+                console.error('[envy_gangscript] Failed to create dropdown');
+            }
+            
+            openModal('invite-player-modal');
+        })
+        .catch(error => {
+            console.error('Error loading players:', error);
+            showNotification('Failed to load players', 'error');
+        });
+    };
+    
+    // Function to handle receiving an invite
+    window.handleReceiveInvite = function(inviteData) {
+        console.log('[envy_gangscript] handleReceiveInvite called with:', inviteData);
+        if (!inviteData || !inviteData.inviteId) {
+            console.log('[envy_gangscript] Invalid invite data');
+            return;
+        }
+        
+        // Clear any existing invite
+        if (inviteCountdownInterval) {
+            clearInterval(inviteCountdownInterval);
+        }
+        
+        currentInviteId = inviteData.inviteId;
+        inviteCountdownSeconds = 30;
+        
+        // Update notification content
+        const messageEl = document.getElementById('invite-message-text');
+        const countdownEl = document.getElementById('invite-countdown');
+        
+        console.log('[envy_gangscript] Updating notification elements:', {
+            messageEl: !!messageEl,
+            countdownEl: !!countdownEl
+        });
+        
+        const gangName = inviteData.gangName || 'Unknown';
+        if (messageEl) {
+            messageEl.innerHTML = `You were invited to join <strong>${gangName}</strong>`;
+        }
+        if (countdownEl) countdownEl.textContent = inviteCountdownSeconds;
+        
+        // Show notification (slide in from right)
+        const notification = document.getElementById('invite-received-notification');
+        console.log('[envy_gangscript] Notification element:', notification);
+        if (notification) {
+            console.log('[envy_gangscript] Showing notification with slide-in animation');
+            // Remove any inline styles that might interfere
+            notification.style.right = '';
+            // Remove show class if it exists (to reset state)
+            notification.classList.remove('show');
+            // Remove hidden class to make element visible
+            notification.classList.remove('hidden');
+            
+            // Force a reflow to ensure the browser processes the initial state (right: -200px from CSS)
+            void notification.offsetHeight;
+            
+            // Add show class in next frame to trigger slide-in animation
+            setTimeout(() => {
+                notification.classList.add('show');
+                console.log('[envy_gangscript] Added show class, notification should slide in');
+            }, 10);
+        } else {
+            console.error('[envy_gangscript] Notification element not found!');
+        }
+        
+        // Start countdown timer
+        inviteCountdownInterval = setInterval(function() {
+            inviteCountdownSeconds--;
+            if (countdownEl) {
+                countdownEl.textContent = inviteCountdownSeconds;
+            }
+            
+            if (inviteCountdownSeconds <= 0) {
+                // Auto-decline after 30 seconds
+                clearInterval(inviteCountdownInterval);
+                inviteCountdownInterval = null;
+                denyInvite();
+            }
+        }, 1000);
+    };
 });
 

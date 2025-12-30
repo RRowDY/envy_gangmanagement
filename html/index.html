@@ -77,6 +77,26 @@
                             </div>
                         </button>
                     </div>
+                    
+                    <!-- Gang Leader Section -->
+                    <div class="section-divider"></div>
+                    <div class="admin-section hidden" id="gang-leader-section">
+                        <!-- Invite Player Button -->
+                        <button class="menu-button" id="invite-player-btn" data-action="invitePlayer">
+                            <div class="button-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15 12 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M8.5 11C10.7091 11 12.5 9.20914 12.5 7C12.5 4.79086 10.7091 3 8.5 3C6.29086 3 4.5 4.79086 4.5 7C4.5 9.20914 6.29086 11 8.5 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                            <div class="button-content">
+                                <span class="button-title">Invite Player</span>
+                                <span class="button-description">Invite a player to join your gang</span>
+                            </div>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Gang Cards Container (for Delete Gang) -->
@@ -237,6 +257,54 @@
                             <button class="modal-button confirm" id="edit-gang-confirm">Save Changes</button>
                         </div>
                     </div>
+                </div>
+
+                <!-- Modal for Invite Player -->
+                <div class="modal hidden" id="invite-player-modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Invite Player</h3>
+                            <button class="modal-close" id="invite-player-close">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <label for="invite-player-select">Select Player:</label>
+                            <div class="custom-dropdown searchable-dropdown" id="invite-player-dropdown">
+                                <div class="dropdown-selected" id="invite-player-selected">
+                                    <input type="text" class="dropdown-search-input" id="invite-player-search" placeholder="Type to search..." autocomplete="off">
+                                    <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <div class="dropdown-options hidden" id="invite-player-options"></div>
+                                <input type="hidden" id="invite-player-id" value="">
+                            </div>
+                            <p class="modal-hint">Search for an online player by name</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-button cancel" id="invite-player-cancel">Cancel</button>
+                            <button class="modal-button confirm" id="invite-player-confirm">Send Invite</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    
+    <!-- Slide-in Notification for Invite Received (Outside menu container so it shows even when menu is closed) -->
+    <div class="invite-notification hidden" id="invite-received-notification">
+        <div class="invite-notification-content">
+            <div class="invite-notification-header">
+                <h3>Gang Invite</h3>
+                <div class="invite-timer">
+                    <span id="invite-countdown">30</span>s
+                </div>
+            </div>
+            <div class="invite-notification-body">
+                <p class="invite-message" id="invite-message-text">You were invited to join GangName</p>
+                <div class="invite-actions">
+                    <span class="invite-key-hint"><kbd>G</kbd> Accept</span>
+                    <span class="invite-key-hint"><kbd>J</kbd> Decline</span>
                 </div>
             </div>
         </div>
