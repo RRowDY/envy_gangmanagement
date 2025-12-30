@@ -1865,6 +1865,12 @@ button, .close-button {
     transform: rotate(2deg);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
     border: 2px dashed var(--primary-blue);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: var(--bg-card);
+    border-radius: 8px;
 }
 
 .rank-item.draggable {
@@ -1944,6 +1950,12 @@ button, .close-button {
     pointer-events: auto;
     user-select: none;
     -webkit-user-select: none;
+}
+
+.rank-item-delete-spacer {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
 }
 
 .rank-item-delete:hover {
