@@ -79,10 +79,11 @@
                     </div>
                     
                     <!-- Gang Leader Section -->
-                    <div class="section-divider">
-                        <span>Gang Leader Options</span>
-                    </div>
                     <div class="admin-section hidden" id="gang-leader-section">
+                        <div class="section-divider">
+                            <span>Gang Leader Options</span>
+                        </div>
+
                         <!-- Invite Player Button -->
                         <button class="menu-button" id="invite-player-btn" data-action="invitePlayer">
                             <div class="button-icon">
@@ -98,6 +99,56 @@
                                 <span class="button-description">Invite a player to join your gang</span>
                             </div>
                         </button>
+
+                        <!-- View Gang Roster Button -->
+                        <button class="menu-button" id="view-roster-btn" data-action="viewRoster">
+                            <div class="button-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M9 11C11.2091 11 13 9.20914 13 7C13 4.79086 11.2091 3 9 3C6.79086 3 5 4.79086 5 7C5 9.20914 6.79086 11 9 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                            <div class="button-content">
+                                <span class="button-title">View Gang Roster</span>
+                                <span class="button-description">View and manage all gang members</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <!-- Gang Member Section (for players in a gang) -->
+                    <div class="section-divider hidden" id="gang-member-section-divider">
+                        <span>Gang Member Options</span>
+                    </div>
+                    <div class="admin-section hidden" id="gang-member-section">
+                        <!-- Leave Gang Button -->
+                        <button class="menu-button" id="leave-gang-btn" data-action="leaveGang">
+                            <div class="button-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M9 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M16 17L21 12M21 12L16 7M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                            <div class="button-content">
+                                <span class="button-title">Leave Gang</span>
+                                <span class="button-description">Leave your current gang</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div class="empty-state hidden" id="empty-state">
+                        <div class="empty-state-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M9 11C11.2091 11 13 9.20914 13 7C13 4.79086 11.2091 3 9 3C6.79086 3 5 4.79086 5 7C5 9.20914 6.79086 11 9 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <h3 class="empty-state-title">No Gang Content Available</h3>
+                        <p class="empty-state-description">You must be a gang leader, staff member, or in a gang to access gang features.</p>
                     </div>
                 </div>
 
@@ -285,6 +336,75 @@
                         <div class="modal-footer">
                             <button class="modal-button cancel" id="invite-player-cancel">Cancel</button>
                             <button class="modal-button confirm" id="invite-player-confirm">Send Invite</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal for Leave Gang Confirmation -->
+                <div class="modal hidden" id="leave-gang-modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Leave Gang</h3>
+                            <button class="modal-close" id="leave-gang-close">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="modal-warning" id="leave-gang-warning">Are you sure you want to leave this gang?</p>
+                            <p class="modal-hint" id="leave-gang-hint">This action cannot be undone.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-button cancel" id="leave-gang-cancel">Cancel</button>
+                            <button class="modal-button danger hold-button" id="leave-gang-confirm" data-hold-time="3000">
+                                <span class="hold-button-text">Hold to Leave</span>
+                                <span class="hold-button-progress"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gang Roster View -->
+                <div class="roster-container hidden" id="roster-container">
+                    <div class="roster-header">
+                        <h3>Gang Roster</h3>
+                        <button class="back-button" id="roster-back-btn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Back
+                        </button>
+                    </div>
+                    <div class="roster-table-container">
+                        <table class="roster-table">
+                            <thead>
+                                <tr>
+                                    <th>Character Name</th>
+                                    <th>Rank</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="roster-table-body">
+                                <!-- Roster rows will be dynamically inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Modal for Kick Player Confirmation -->
+                <div class="modal hidden" id="kick-player-modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Kick Player</h3>
+                            <button class="modal-close" id="kick-player-close">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="modal-warning">Are you sure you want to kick <strong id="kick-player-name"></strong> from the gang?</p>
+                            <p class="modal-hint">This action cannot be undone.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="modal-button cancel" id="kick-player-cancel">Cancel</button>
+                            <button class="modal-button danger hold-button" id="kick-player-confirm" data-hold-time="3000">
+                                <span class="hold-button-text">Hold to Kick</span>
+                                <span class="hold-button-progress"></span>
+                            </button>
                         </div>
                     </div>
                 </div>

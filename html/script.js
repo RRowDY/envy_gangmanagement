@@ -122,6 +122,30 @@ function openMenu(data) {
         }
     }
     
+    // Show/hide gang member section (show for all gang members, including leaders)
+    const gangMemberSection = document.getElementById('gang-member-section');
+    const gangMemberSectionDivider = document.getElementById('gang-member-section-divider');
+    if (gangMemberSection && gangMemberSectionDivider) {
+        if (data && data.inGang) {
+            gangMemberSection.classList.remove('hidden');
+            gangMemberSectionDivider.classList.remove('hidden');
+        } else {
+            gangMemberSection.classList.add('hidden');
+            gangMemberSectionDivider.classList.add('hidden');
+        }
+    }
+    
+    // Show/hide empty state
+    const emptyState = document.getElementById('empty-state');
+    if (emptyState) {
+        const hasContent = (data && data.isStaff) || (data && data.isGangLeader) || (data && data.inGang);
+        if (hasContent) {
+            emptyState.classList.add('hidden');
+        } else {
+            emptyState.classList.remove('hidden');
+        }
+    }
+    
     const container = document.getElementById('gang-menu-container');
     if (container) {
         container.classList.remove('hidden');
@@ -621,7 +645,7 @@ function createEditGangCard(gang) {
                     </svg>
                     <div class="gang-card-back-message">Edit this gang?</div>
                     <div class="gang-card-back-hint">Click the button below to edit</div>
-                    <button class="gang-card-delete-btn" style="background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%);" data-gang-id="${gang.id}">Edit Gang</button>
+                    <button class="gang-card-delete-btn" data-gang-id="${gang.id}">Edit Gang</button>
                 </div>
             </div>
         </div>
@@ -1728,6 +1752,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 closeModal('create-gang-modal');
             } else if (!document.getElementById('invite-player-modal').classList.contains('hidden')) {
                 closeModal('invite-player-modal');
+            } else if (!document.getElementById('leave-gang-modal').classList.contains('hidden')) {
+                closeModal('leave-gang-modal');
+            } else if (!document.getElementById('kick-player-modal').classList.contains('hidden')) {
+                closeModal('kick-player-modal');
+            } else if (!document.getElementById('roster-container').classList.contains('hidden')) {
+                hideRoster();
             } else if (!document.getElementById('invite-received-notification').classList.contains('hidden')) {
                 hideInviteNotification();
             } else if (!document.getElementById('edit-gang-cards-container').classList.contains('hidden')) {
@@ -2036,5 +2066,334 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }, 1000);
     };
+    
+    // View Roster button
+    const viewRosterBtn = document.getElementById('view-roster-btn');
+    if (viewRosterBtn) {
+        viewRosterBtn.addEventListener('click', function() {
+            showRoster();
+        });
+    }
+    
+    // Leave Gang button
+    const leaveGangBtn = document.getElementById('leave-gang-btn');
+    if (leaveGangBtn) {
+        leaveGangBtn.addEventListener('click', function() {
+            openLeaveGangModal();
+        });
+    }
+    
+    // Leave Gang modal handlers
+    const leaveGangModal = document.getElementById('leave-gang-modal');
+    const leaveGangClose = document.getElementById('leave-gang-close');
+    const leaveGangCancel = document.getElementById('leave-gang-cancel');
+    const leaveGangConfirm = document.getElementById('leave-gang-confirm');
+    
+    if (leaveGangClose) {
+        leaveGangClose.addEventListener('click', () => closeModal('leave-gang-modal'));
+    }
+    if (leaveGangCancel) {
+        leaveGangCancel.addEventListener('click', () => closeModal('leave-gang-modal'));
+    }
+    
+    // Roster back button
+    const rosterBackBtn = document.getElementById('roster-back-btn');
+    if (rosterBackBtn) {
+        rosterBackBtn.addEventListener('click', function() {
+            hideRoster();
+        });
+    }
+    
+    // Kick Player modal handlers
+    const kickPlayerClose = document.getElementById('kick-player-close');
+    const kickPlayerCancel = document.getElementById('kick-player-cancel');
+    
+    if (kickPlayerClose) {
+        kickPlayerClose.addEventListener('click', () => {
+            closeModal('kick-player-modal');
+            pendingKickCitizenid = null;
+        });
+    }
+    if (kickPlayerCancel) {
+        kickPlayerCancel.addEventListener('click', () => {
+            closeModal('kick-player-modal');
+            pendingKickCitizenid = null;
+        });
+    }
+    
+    // Initialize hold buttons
+    initHoldButtons();
 });
+
+// Hold button functionality
+let holdButtonIntervals = {};
+
+function initHoldButtons() {
+    document.querySelectorAll('.hold-button').forEach(button => {
+        const holdTime = parseInt(button.getAttribute('data-hold-time')) || 3000;
+        let holdInterval = null;
+        let holdStartTime = null;
+        
+        button.addEventListener('mousedown', function(e) {
+            if (this.disabled) return;
+            
+            const buttonId = this.id;
+            holdStartTime = Date.now();
+            const progressBar = this.querySelector('.hold-button-progress');
+            const textSpan = this.querySelector('.hold-button-text');
+            
+            if (progressBar) {
+                progressBar.style.width = '0%';
+            }
+            
+            holdInterval = setInterval(() => {
+                const elapsed = Date.now() - holdStartTime;
+                const progress = Math.min((elapsed / holdTime) * 100, 100);
+                
+                if (progressBar) {
+                    progressBar.style.width = progress + '%';
+                }
+                
+                if (progress >= 100) {
+                    clearInterval(holdInterval);
+                    holdButtonIntervals[buttonId] = null;
+                    
+                    // Trigger the action
+                    if (buttonId === 'leave-gang-confirm') {
+                        confirmLeaveGang();
+                    } else if (buttonId === 'kick-player-confirm') {
+                        confirmKickPlayer();
+                    }
+                }
+            }, 10);
+            
+            holdButtonIntervals[buttonId] = holdInterval;
+        });
+        
+        button.addEventListener('mouseup', function() {
+            const buttonId = this.id;
+            if (holdButtonIntervals[buttonId]) {
+                clearInterval(holdButtonIntervals[buttonId]);
+                holdButtonIntervals[buttonId] = null;
+                
+                const progressBar = this.querySelector('.hold-button-progress');
+                if (progressBar) {
+                    progressBar.style.width = '0%';
+                }
+            }
+        });
+        
+        button.addEventListener('mouseleave', function() {
+            const buttonId = this.id;
+            if (holdButtonIntervals[buttonId]) {
+                clearInterval(holdButtonIntervals[buttonId]);
+                holdButtonIntervals[buttonId] = null;
+                
+                const progressBar = this.querySelector('.hold-button-progress');
+                if (progressBar) {
+                    progressBar.style.width = '0%';
+                }
+            }
+        });
+    });
+}
+
+// Roster functions
+function showRoster() {
+    const menuButtons = document.getElementById('menu-buttons');
+    const rosterContainer = document.getElementById('roster-container');
+    
+    if (menuButtons) menuButtons.classList.add('hidden');
+    if (rosterContainer) {
+        rosterContainer.classList.remove('hidden');
+        loadRoster();
+    }
+}
+
+function hideRoster() {
+    const menuButtons = document.getElementById('menu-buttons');
+    const rosterContainer = document.getElementById('roster-container');
+    
+    if (menuButtons) menuButtons.classList.remove('hidden');
+    if (rosterContainer) rosterContainer.classList.add('hidden');
+}
+
+function loadRoster() {
+    fetch(`https://${GetParentResourceName()}/getGangRoster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success && result.roster) {
+            renderRoster(result.roster);
+        } else {
+            showNotification(result.message || 'Failed to load roster', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error loading roster:', error);
+        showNotification('Failed to load roster', 'error');
+    });
+}
+
+function renderRoster(roster) {
+    const tbody = document.getElementById('roster-table-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    roster.forEach(member => {
+        const row = document.createElement('tr');
+        row.className = member.isLeader ? 'roster-row leader' : 'roster-row';
+        
+        const nameCell = document.createElement('td');
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = member.charname;
+        nameCell.appendChild(nameSpan);
+        if (member.isOnline) {
+            const onlineBadge = document.createElement('span');
+            onlineBadge.className = 'online-badge';
+            onlineBadge.title = 'Online';
+            nameCell.appendChild(onlineBadge);
+        }
+        
+        const rankCell = document.createElement('td');
+        rankCell.textContent = member.rank;
+        
+        const actionsCell = document.createElement('td');
+        const editBtn = document.createElement('button');
+        editBtn.className = 'roster-edit-btn';
+        editBtn.textContent = 'Edit';
+        editBtn.disabled = member.isLeader;
+        if (member.isLeader) {
+            editBtn.title = 'Cannot kick gang leader';
+        }
+        editBtn.addEventListener('click', () => openKickPlayerModal(member.citizenid, member.charname, member.isLeader));
+        actionsCell.appendChild(editBtn);
+        
+        row.appendChild(nameCell);
+        row.appendChild(rankCell);
+        row.appendChild(actionsCell);
+        
+        tbody.appendChild(row);
+    });
+}
+
+// Leave Gang functions
+function openLeaveGangModal() {
+    // Check if player is leader to show appropriate warning
+    // Use menuData if available, otherwise show default message
+    const warningText = document.getElementById('leave-gang-warning');
+    const hintText = document.getElementById('leave-gang-hint');
+    
+    if (menuData && menuData.isGangLeader) {
+        if (warningText) warningText.textContent = 'Are you sure you want to leave this gang?';
+        if (hintText) hintText.textContent = 'Leadership will be assigned to the next highest ranking member. This action cannot be undone.';
+    } else {
+        if (warningText) warningText.textContent = 'Are you sure you want to leave this gang?';
+        if (hintText) hintText.textContent = 'This action cannot be undone.';
+    }
+    
+    openModal('leave-gang-modal');
+}
+
+function confirmLeaveGang() {
+    const confirmBtn = document.getElementById('leave-gang-confirm');
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.classList.add('loading');
+    }
+    
+    fetch(`https://${GetParentResourceName()}/leaveGang`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showNotification(result.message || 'You have left the gang', 'success');
+            closeModal('leave-gang-modal');
+            closeMenu();
+            fetch(`https://${GetParentResourceName()}/closeMenu`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+        } else {
+            showNotification(result.message || 'Failed to leave gang', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error leaving gang:', error);
+        showNotification('Failed to leave gang', 'error');
+    })
+    .finally(() => {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.classList.remove('loading');
+            const progressBar = confirmBtn.querySelector('.hold-button-progress');
+            if (progressBar) progressBar.style.width = '0%';
+        }
+    });
+}
+
+// Kick Player functions
+let pendingKickCitizenid = null;
+
+function openKickPlayerModal(citizenid, charname, isLeader) {
+    if (isLeader) {
+        showNotification('You cannot kick the gang leader', 'error');
+        return;
+    }
+    
+    pendingKickCitizenid = citizenid;
+    const nameSpan = document.getElementById('kick-player-name');
+    if (nameSpan) nameSpan.textContent = charname;
+    
+    openModal('kick-player-modal');
+}
+
+function confirmKickPlayer() {
+    if (!pendingKickCitizenid) return;
+    
+    const confirmBtn = document.getElementById('kick-player-confirm');
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.classList.add('loading');
+    }
+    
+    fetch(`https://${GetParentResourceName()}/kickPlayer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetCitizenid: pendingKickCitizenid })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showNotification(result.message || 'Player has been kicked from the gang', 'success');
+            closeModal('kick-player-modal');
+            pendingKickCitizenid = null;
+            // Refresh roster
+            loadRoster();
+        } else {
+            showNotification(result.message || 'Failed to kick player', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error kicking player:', error);
+        showNotification('Failed to kick player', 'error');
+    })
+    .finally(() => {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.classList.remove('loading');
+            const progressBar = confirmBtn.querySelector('.hold-button-progress');
+            if (progressBar) progressBar.style.width = '0%';
+        }
+    });
+}
+
 

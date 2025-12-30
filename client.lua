@@ -8,20 +8,25 @@ local isMenuOpen = false
 local function OpenGangMenu()
     if isMenuOpen then return end
     
-    -- Check if player is staff and if player is gang leader
+    -- Check if player is staff, if player is gang leader, and if player is in a gang
     QBCore.Functions.TriggerCallback('envy_gangscript:isStaff', function(isStaff)
         QBCore.Functions.TriggerCallback('envy_gangscript:isGangLeader', function(isGangLeader)
-            isMenuOpen = true
-            SetNuiFocus(true, true)
-            
-            SendNUIMessage({
-                action = 'openMenu',
-                data = {
-                    logoImage = Config.LogoImage,
-                    isStaff = isStaff,
-                    isGangLeader = isGangLeader
-                }
-            })
+            QBCore.Functions.TriggerCallback('envy_gangscript:getPlayerGang', function(gangData)
+                local inGang = gangData ~= nil
+                
+                isMenuOpen = true
+                SetNuiFocus(true, true)
+                
+                SendNUIMessage({
+                    action = 'openMenu',
+                    data = {
+                        logoImage = Config.LogoImage,
+                        isStaff = isStaff,
+                        isGangLeader = isGangLeader,
+                        inGang = inGang
+                    }
+                })
+            end)
         end)
     end)
 end
@@ -184,14 +189,45 @@ RegisterCommand('gang_invite_deny', function()
 end, false)
 
 -- Show notification event (for inviter notifications)
-RegisterNetEvent('envy_gangscript:showNotification', function(message, type)
+RegisterNetEvent('envy_gangscript:showNotification', function(message, type, title)
     SendNUIMessage({
         action = 'showNotification',
         data = {
             message = message,
-            type = type or 'info'
+            type = type or 'info',
+            title = title
         }
     })
+end)
+
+RegisterNUICallback('getGangRoster', function(data, cb)
+    QBCore.Functions.TriggerCallback('envy_gangscript:getGangRoster', function(result)
+        cb(result)
+    end)
+end)
+
+RegisterNUICallback('leaveGang', function(data, cb)
+    QBCore.Functions.TriggerCallback('envy_gangscript:leaveGang', function(result)
+        cb(result)
+    end)
+end)
+
+RegisterNUICallback('kickPlayer', function(data, cb)
+    local targetCitizenid = data.targetCitizenid
+    if not targetCitizenid then
+        cb({ success = false, message = 'Missing target citizen ID' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:kickPlayer', function(result)
+        cb(result)
+    end, targetCitizenid)
+end)
+
+RegisterNUICallback('getPlayerGang', function(data, cb)
+    QBCore.Functions.TriggerCallback('envy_gangscript:getPlayerGang', function(result)
+        cb(result)
+    end)
 end)
 
 -- Receive invite event
