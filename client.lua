@@ -292,6 +292,34 @@ RegisterNUICallback('updateRankPermission', function(data, cb)
     end, rankName, permission, enabled)
 end)
 
+RegisterNUICallback('updateRankPermissions', function(data, cb)
+    local rankName = data.rankName
+    local permissions = data.permissions
+    
+    if not rankName or not permissions then
+        cb({ success = false, message = 'Missing required data' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:updateRankPermissions', function(result)
+        cb(result)
+    end, rankName, permissions)
+end)
+
+RegisterNUICallback('editPlayerRank', function(data, cb)
+    local citizenid = data.citizenid
+    local rankName = data.rankName
+    
+    if not citizenid or not rankName then
+        cb({ success = false, message = 'Missing required data' })
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('envy_gangscript:editPlayerRank', function(result)
+        cb(result)
+    end, citizenid, rankName)
+end)
+
 -- Receive invite event
 RegisterNetEvent('envy_gangscript:receiveInvite', function(inviteData)
     SendNUIMessage({

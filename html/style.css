@@ -800,9 +800,10 @@ body {
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
     width: 16px;
     height: 16px;
+    margin-top: -8px;
+    margin-left: -8px;
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-top-color: var(--secondary-white);
     border-radius: 50%;
@@ -831,6 +832,7 @@ body {
     gap: 12px;
     transition: all 0.3s ease;
     user-select: none;
+    padding-right: 20px;
 }
 
 .dropdown-selected:hover {
@@ -859,6 +861,8 @@ body {
     color: var(--text-secondary);
     transition: transform 0.3s ease;
     flex-shrink: 0;
+    /* margin-left: 12px; */
+    /* margin-right: 2px; */
 }
 
 .dropdown-selected.active .dropdown-arrow {
@@ -868,6 +872,7 @@ body {
 
 .searchable-dropdown .dropdown-selected {
     padding: 0;
+    padding-right: 16px;
 }
 
 .dropdown-search-input {
@@ -1771,6 +1776,38 @@ button, .close-button {
     box-shadow: none;
 }
 
+.roster-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.roster-kick-btn {
+    padding: 6px 16px;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: var(--secondary-white);
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.roster-kick-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #f87171, #ef4444);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    transform: translateY(-1px);
+}
+
+.roster-kick-btn:disabled {
+    background: rgba(100, 116, 139, 0.3);
+    color: rgba(203, 213, 225, 0.5);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
 /* Hold Button */
 .hold-button {
     position: relative;
@@ -1971,6 +2008,26 @@ button, .close-button {
     box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
 }
 
+.edit-permissions-btn.disabled,
+.edit-permissions-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(107, 114, 128, 0.3);
+    border-color: rgba(107, 114, 128, 0.3);
+    color: rgba(203, 213, 225, 0.5);
+    box-shadow: none;
+}
+
+.edit-permissions-btn.disabled:hover,
+.edit-permissions-btn:disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.rank-item.no-drag {
+    cursor: not-allowed;
+}
+
 .permissions-list {
     display: flex;
     flex-direction: column;
@@ -2042,6 +2099,21 @@ button, .close-button {
 }
 
 /* Checkbox styling with Animate UI-inspired animation */
+.permission-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sub-checkbox {
+    margin-left: 28px;
+    opacity: 0.9;
+}
+
+.sub-checkbox.hidden {
+    display: none;
+}
+
 .checkbox-label {
     display: flex;
     align-items: center;
