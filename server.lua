@@ -908,9 +908,10 @@ QBCore.Functions.CreateCallback('envy_gangscript:acceptInvite', function(source,
     cb({ success = true, message = string.format('You joined %s!', invite.gangName) })
     
     -- Clean up invite after a short delay
-    SetTimeout(function()
+    CreateThread(function()
+        Wait(5000)
         ActiveInvites[inviteId] = nil
-    end, 5000)
+    end)
 end)
 
 -- Callback: Deny invite
@@ -946,5 +947,347 @@ QBCore.Functions.CreateCallback('envy_gangscript:denyInvite', function(source, c
     cb({ success = true, message = 'Invite declined' })
     
     -- Note: Cleanup is handled by the cleanup thread after 300 seconds
+end)
+
+-- Callback: Get gang roster
+QBCore.Functions.CreateCallback('envy_gangscript:getGangRoster', function(source, cb)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    -- Check if player is a gang leader
+    if not IsGangLeader(source) then
+        cb({ success = false, message = 'You must be a gang leader to view the roster' })
+        return
+    end
+    
+    local player = QBCore.Functions.GetPlayer(source)
+    if not player then
+        cb({ success = false, message = 'Player not found' })
+        return
+    end
+    
+    local citizenid = player.PlayerData.citizenid
+    
+    -- Find the gang the player is leader of
+    local gangs = MySQL.query.await('SELECT id, gang_members, gang_ranks FROM gangs', {})
+    if not gangs then
+        cb({ success = false, message = 'Failed to retrieve gangs' })
+        return
+    end
+    
+    local playerGang = nil
+    for _, gang in ipairs(gangs) do
+        if gang.gang_members then
+            local success, members = pcall(json.decode, gang.gang_members)
+            if success and members and type(members) == 'table' then
+                local memberData = members[citizenid]
+                if memberData and memberData.rank == 'boss' and memberData.level == 10 then
+                    playerGang = gang
+                    break
+                end
+            end
+        end
+    end
+    
+    if not playerGang then
+        cb({ success = false, message = 'Gang not found' })
+        return
+    end
+    
+    -- Decode members and ranks
+    local members = {}
+    if playerGang.gang_members then
+        local success, decodedMembers = pcall(json.decode, playerGang.gang_members)
+        if success and decodedMembers and type(decodedMembers) == 'table' then
+            members = decodedMembers
+        end
+    end
+    
+    local ranks = {}
+    if playerGang.gang_ranks then
+        local success, decodedRanks = pcall(json.decode, playerGang.gang_ranks)
+        if success and decodedRanks and type(decodedRanks) == 'table' then
+            ranks = decodedRanks
+        end
+    end
+    
+    -- Build roster list
+    local roster = {}
+    for memberCitizenid, memberData in pairs(members) do
+        local rankName = 'Unknown'
+        -- Search through ranks array to find matching rank
+        if type(ranks) == 'table' then
+            for _, rankData in ipairs(ranks) do
+                if rankData.name == memberData.rank then
+                    -- Capitalize first letter
+                    rankName = string.upper(string.sub(rankData.name, 1, 1)) .. string.sub(rankData.name, 2)
+                    break
+                end
+            end
+        end
+        -- Fallback to memberData.rank if not found (capitalize first letter)
+        if rankName == 'Unknown' and memberData.rank then
+            rankName = string.upper(string.sub(memberData.rank, 1, 1)) .. string.sub(memberData.rank, 2)
+        end
+        
+        -- Check if player is online
+        local isOnline = false
+        for src, onlinePlayer in pairs(QBCore.Functions.GetQBPlayers()) do
+            if onlinePlayer.PlayerData.citizenid == memberCitizenid then
+                isOnline = true
+                break
+            end
+        end
+        
+        roster[#roster + 1] = {
+            citizenid = memberCitizenid,
+            charname = memberData.charname or 'Unknown',
+            rank = rankName,
+            level = memberData.level or 0,
+            isLeader = memberData.rank == 'boss' and memberData.level == 10,
+            isOnline = isOnline
+        }
+    end
+    
+    -- Sort roster: by level (descending), then alphabetically by character name
+    table.sort(roster, function(a, b)
+        if a.level ~= b.level then
+            return a.level > b.level
+        end
+        return a.charname < b.charname
+    end)
+    
+    cb({ success = true, roster = roster })
+end)
+
+-- Callback: Leave gang
+QBCore.Functions.CreateCallback('envy_gangscript:leaveGang', function(source, cb)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    local player = QBCore.Functions.GetPlayer(source)
+    if not player then
+        cb({ success = false, message = 'Player not found' })
+        return
+    end
+    
+    local citizenid = player.PlayerData.citizenid
+    
+    -- Find the gang the player is in
+    local gangs = MySQL.query.await('SELECT id, name, owner, gang_members FROM gangs', {})
+    if not gangs then
+        cb({ success = false, message = 'Failed to retrieve gangs' })
+        return
+    end
+    
+    local playerGang = nil
+    for _, gang in ipairs(gangs) do
+        if gang.gang_members then
+            local success, members = pcall(json.decode, gang.gang_members)
+            if success and members and type(members) == 'table' then
+                if members[citizenid] then
+                    playerGang = gang
+                    break
+                end
+            end
+        end
+    end
+    
+    if not playerGang then
+        cb({ success = false, message = 'You are not in a gang' })
+        return
+    end
+    
+    -- Decode members
+    local members = {}
+    if playerGang.gang_members then
+        local success, decodedMembers = pcall(json.decode, playerGang.gang_members)
+        if success and decodedMembers and type(decodedMembers) == 'table' then
+            members = decodedMembers
+        end
+    end
+    
+    local memberData = members[citizenid]
+    if not memberData then
+        cb({ success = false, message = 'Member data not found' })
+        return
+    end
+    
+    local isLeader = memberData.rank == 'boss' and memberData.level == 10
+    local playerName = memberData.charname or 'Unknown'
+    
+    -- Get gang leader citizenid for notification
+    local gangLeaderCitizenid = playerGang.owner
+    
+    -- Count total members
+    local memberCount = 0
+    for _ in pairs(members) do
+        memberCount = memberCount + 1
+    end
+    
+    -- If leader is the only member, delete the gang
+    if isLeader and memberCount == 1 then
+        local deleteResult = MySQL.query.await('DELETE FROM gangs WHERE id = ?', { playerGang.id })
+        if deleteResult then
+            cb({ success = true, message = 'Gang deleted (you were the only member)' })
+            return
+        else
+            cb({ success = false, message = 'Failed to delete gang' })
+            return
+        end
+    end
+    
+    -- If leader, assign new leader
+    if isLeader then
+        -- Find next highest level member (alphabetically by name if tied)
+        local newLeaderCitizenid = nil
+        local newLeaderLevel = -1
+        local newLeaderName = nil
+        
+        for memberCitizenid, memberMemberData in pairs(members) do
+            if memberCitizenid ~= citizenid then
+                if memberMemberData.level > newLeaderLevel or 
+                   (memberMemberData.level == newLeaderLevel and 
+                    (not newLeaderName or memberMemberData.charname < newLeaderName)) then
+                    newLeaderCitizenid = memberCitizenid
+                    newLeaderLevel = memberMemberData.level
+                    newLeaderName = memberMemberData.charname
+                end
+            end
+        end
+        
+        if newLeaderCitizenid then
+            -- Update new leader to boss
+            members[newLeaderCitizenid].rank = 'boss'
+            members[newLeaderCitizenid].level = 10
+            
+            -- Update owner in database
+            MySQL.query.await('UPDATE gangs SET owner = ? WHERE id = ?', { newLeaderCitizenid, playerGang.id })
+        end
+    end
+    
+    -- Remove player from members
+    members[citizenid] = nil
+    
+    -- Update gang_members in database
+    local membersJson = json.encode(members)
+    local updateResult = MySQL.query.await('UPDATE gangs SET gang_members = ? WHERE id = ?', { membersJson, playerGang.id })
+    
+    if updateResult then
+        -- Notify gang leader if they're online and the leaving player is not the leader
+        if not isLeader and gangLeaderCitizenid then
+            local leaderPlayer = QBCore.Functions.GetPlayerByCitizenId(gangLeaderCitizenid)
+            if leaderPlayer then
+                TriggerClientEvent('envy_gangscript:showNotification', leaderPlayer.PlayerData.source, 
+                    string.format('%s has left %s', playerName, playerGang.name), 'warning', 'Member Left Gang')
+            end
+        end
+        
+        cb({ success = true, message = 'You have left the gang' })
+    else
+        cb({ success = false, message = 'Failed to update gang' })
+    end
+end)
+
+-- Callback: Kick player from gang
+QBCore.Functions.CreateCallback('envy_gangscript:kickPlayer', function(source, cb, targetCitizenid)
+    if not MySQL then
+        cb({ success = false, message = 'Database not available' })
+        return
+    end
+    
+    -- Check if player is a gang leader
+    if not IsGangLeader(source) then
+        cb({ success = false, message = 'You must be a gang leader to kick players' })
+        return
+    end
+    
+    local player = QBCore.Functions.GetPlayer(source)
+    if not player then
+        cb({ success = false, message = 'Player not found' })
+        return
+    end
+    
+    local leaderCitizenid = player.PlayerData.citizenid
+    
+    if leaderCitizenid == targetCitizenid then
+        cb({ success = false, message = 'You cannot kick yourself' })
+        return
+    end
+    
+    -- Find the gang
+    local gangs = MySQL.query.await('SELECT id, name, gang_members FROM gangs', {})
+    if not gangs then
+        cb({ success = false, message = 'Failed to retrieve gangs' })
+        return
+    end
+    
+    local playerGang = nil
+    for _, gang in ipairs(gangs) do
+        if gang.gang_members then
+            local success, members = pcall(json.decode, gang.gang_members)
+            if success and members and type(members) == 'table' then
+                local memberData = members[leaderCitizenid]
+                if memberData and memberData.rank == 'boss' and memberData.level == 10 then
+                    playerGang = gang
+                    break
+                end
+            end
+        end
+    end
+    
+    if not playerGang then
+        cb({ success = false, message = 'Gang not found' })
+        return
+    end
+    
+    -- Decode members
+    local members = {}
+    if playerGang.gang_members then
+        local success, decodedMembers = pcall(json.decode, playerGang.gang_members)
+        if success and decodedMembers and type(decodedMembers) == 'table' then
+            members = decodedMembers
+        end
+    end
+    
+    -- Check if target is in the gang
+    if not members[targetCitizenid] then
+        cb({ success = false, message = 'Player is not in your gang' })
+        return
+    end
+    
+    -- Check if target is the leader
+    local targetData = members[targetCitizenid]
+    if targetData.rank == 'boss' and targetData.level == 10 then
+        cb({ success = false, message = 'You cannot kick the gang leader' })
+        return
+    end
+    
+    -- Get target player's character name for notification
+    local targetName = targetData.charname or 'Unknown'
+    
+    -- Remove player from members
+    members[targetCitizenid] = nil
+    
+    -- Update gang_members in database
+    local membersJson = json.encode(members)
+    local updateResult = MySQL.query.await('UPDATE gangs SET gang_members = ? WHERE id = ?', { membersJson, playerGang.id })
+    
+    if updateResult then
+        -- Notify kicked player if they're online
+        local targetPlayer = QBCore.Functions.GetPlayerByCitizenId(targetCitizenid)
+        if targetPlayer then
+            TriggerClientEvent('envy_gangscript:showNotification', targetPlayer.PlayerData.source, 
+                string.format('You have been kicked from %s', playerGang.name), 'error', 'Kicked from Gang')
+        end
+        
+        cb({ success = true, message = 'Player has been kicked from the gang' })
+    else
+        cb({ success = false, message = 'Failed to update gang' })
+    end
 end)
 

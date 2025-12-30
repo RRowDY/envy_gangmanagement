@@ -406,6 +406,12 @@ body {
     gap: 12px;
 }
 
+.admin-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
 /* Modal Styles */
 .modal {
     position: fixed;
@@ -1433,24 +1439,41 @@ button, .close-button {
 
 .gang-card-delete-btn {
     padding: 10px 16px;
-    background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%);
-    border: 1px solid #ef4444;
     border-radius: 6px;
     color: white;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
     flex-shrink: 0;
     white-space: nowrap;
     margin-top: 2px;
 }
 
-.gang-card-delete-btn:hover {
-    background: linear-gradient(135deg, var(--primary-blue-light) 0%, var(--primary-blue) 100%);
+/* Red button for delete cards (contrasting with red background) */
+.gang-card-back:not(.edit-gang-card-back) .gang-card-delete-btn {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    border: 1px solid #ef4444;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.gang-card-back:not(.edit-gang-card-back) .gang-card-delete-btn:hover {
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
     transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+}
+
+/* Blue button for edit cards (contrasting with green background) */
+.gang-card-back.edit-gang-card-back .gang-card-delete-btn {
+    background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%);
+    border: 1px solid var(--primary-blue);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.gang-card-back.edit-gang-card-back .gang-card-delete-btn:hover {
+    background: linear-gradient(135deg, var(--primary-blue-light) 0%, var(--primary-blue) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
 }
 
 .gang-card-delete-btn:active {
@@ -1598,5 +1621,180 @@ button, .close-button {
     min-width: 20px;
     text-align: center;
     display: inline-block;
+}
+
+/* Empty State */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 40px;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.empty-state-icon {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 24px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.empty-state p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+/* Roster Container */
+.roster-container {
+    width: 100%;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.roster-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.roster-header h3 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.roster-table-container {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-card);
+    overflow-x: auto;
+}
+
+.roster-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.roster-table thead {
+    background: rgba(37, 99, 235, 0.1);
+}
+
+.roster-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-cyan);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.roster-table td {
+    padding: 16px;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.roster-row:hover {
+    background: rgba(37, 99, 235, 0.05);
+}
+
+.roster-row.leader {
+    background: rgba(37, 99, 235, 0.1);
+}
+
+.roster-row.leader:hover {
+    background: rgba(37, 99, 235, 0.15);
+}
+
+.online-badge {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #10b981;
+    border-radius: 50%;
+    margin-left: 8px;
+    vertical-align: middle;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.roster-edit-btn {
+    padding: 6px 16px;
+    background: linear-gradient(135deg, var(--primary-blue), var(--primary-blue-dark));
+    color: var(--secondary-white);
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+.roster-edit-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--primary-blue-light), var(--primary-blue));
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+    transform: translateY(-1px);
+}
+
+.roster-edit-btn:disabled {
+    background: rgba(100, 116, 139, 0.3);
+    color: rgba(203, 213, 225, 0.5);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* Hold Button */
+.hold-button {
+    position: relative;
+    overflow: hidden;
+    min-width: 150px;
+}
+
+.hold-button-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0%;
+    background: rgba(255, 255, 255, 0.2);
+    transition: width 0.1s linear;
+    z-index: 1;
+}
+
+.hold-button-text {
+    position: relative;
+    z-index: 2;
+}
+
+.hold-button:disabled .hold-button-progress {
+    width: 0% !important;
 }
 
